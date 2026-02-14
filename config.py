@@ -6,12 +6,12 @@ Autonomous OSINT analyst agent running on Kali via Ollama.
 import os
 
 # === Identity ===
-AGENT_NAME = "local_joshua"  # Distinct from JOSHUA (Claude Code)
+AGENT_NAME = "local_joshua"
 AGENT_DISPLAY = "Local Joshua"
 
 # === Network ===
 OLLAMA_URL = os.environ.get("JOSHUA_OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("JOSHUA_MODEL", "joshua:latest")  # Base: dolphin-mistral:7b-v2.8 (uncensored)
+OLLAMA_MODEL = os.environ.get("JOSHUA_MODEL", "joshua:latest")
 BLACKBOARD_URL = os.environ.get("BLACKBOARD_URL", "http://localhost:9700")
 COURT_RECORDS_URL = os.environ.get("COURT_RECORDS_URL", "http://localhost:9800")
 UNIFI_MCP_URL = os.environ.get("UNIFI_MCP_URL", "http://localhost:9600")

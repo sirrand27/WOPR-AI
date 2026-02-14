@@ -17,7 +17,7 @@
 
 # Joshua AI
 
-**Autonomous OSINT analyst and network defense agent** powered by a local LLM via [Ollama](https://ollama.com). Joshua operates as a fully self-contained AI agent on Kali Linux — no cloud AI services required. It polls a shared [Blackboard MCP](https://github.com/sirrand27) coordination server for tasks and messages, executes OSINT tools, monitors network perimeter via UniFi, and learns from every interaction.
+**Autonomous OSINT analyst and network defense agent** powered by a local LLM via [Ollama](https://ollama.com). Joshua operates as a fully self-contained AI agent on Kali Linux — no cloud AI services required. It polls a shared Blackboard MCP coordination server for tasks and messages, executes OSINT tools, monitors network perimeter via UniFi, and learns from every interaction.
 
 Personality and callsign derived from the WOPR supercomputer in *WarGames* (1983).
 
@@ -128,7 +128,7 @@ sudo apt install sherlock theharvester whatweb fierce dnsrecon photon h8mail
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/sirrand27/Joshua-AI.git
+git clone <repo-url>
 cd Joshua-AI
 
 # 2. Install Ollama (if not already installed)

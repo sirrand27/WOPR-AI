@@ -5,8 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=sirrand
-WorkingDirectory=/home/sirrand/pentest/local_joshua
+WorkingDirectory=%h/Joshua-AI
 Environment=JOSHUA_OLLAMA_URL=http://localhost:11434
 Environment=JOSHUA_MODEL=joshua:latest
 Environment=BLACKBOARD_URL=http://localhost:9700
@@ -15,8 +14,8 @@ Environment=JOSHUA_VOICE_HOST=localhost
 Environment=JOSHUA_VOICE_PORT=9876
 Environment=JOSHUA_INFERENCE_DEVICE=cuda
 Environment=JOSHUA_POLL_INTERVAL=10
-Environment=JOSHUA_LOG_FILE=/home/sirrand/pentest/local_joshua/joshua.log
-ExecStart=/home/sirrand/pentest/local_joshua/venv/bin/python /home/sirrand/pentest/local_joshua/agent.py
+Environment=JOSHUA_LOG_FILE=%h/Joshua-AI/joshua.log
+ExecStart=%h/Joshua-AI/venv/bin/python %h/Joshua-AI/agent.py
 Restart=on-failure
 RestartSec=10
 

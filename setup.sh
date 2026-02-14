@@ -1,10 +1,10 @@
 #!/bin/bash
-# Local Joshua AI Agent — Setup Script for Kali
+# Local Joshua AI Agent — Setup Script
 # Run as: bash setup.sh
 
 set -e
 
-INSTALL_DIR="/home/sirrand/pentest/local_joshua"
+INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "=== Local Joshua AI Agent Setup ==="
 echo "Install directory: $INSTALL_DIR"
 
@@ -19,7 +19,7 @@ if command -v ollama &>/dev/null; then
     echo "Model 'joshua:latest' created."
 else
     echo "WARNING: Ollama not installed. Install with: curl -fsSL https://ollama.com/install.sh | sh"
-    echo "Then run: ollama pull mistral:7b-instruct-v0.3-q4_K_M && ollama create joshua -f $INSTALL_DIR/joshua.modelfile"
+    echo "Then run: ollama pull dolphin-mistral:7b-v2.8 && ollama create joshua -f $INSTALL_DIR/joshua.modelfile"
 fi
 
 # 3. Install systemd service
