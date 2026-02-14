@@ -195,7 +195,7 @@ systemctl --user restart local-joshua
 ### Status Check Output
 
 ```
-=== local_joshua Status ===
+=== joshua Status ===
 Ollama: ONLINE (3 models, joshua:latest: YES)
 Blackboard: ONLINE (http://localhost:9700)
 Voice: ONLINE (localhost:9876)
@@ -224,7 +224,7 @@ All configuration is in `config.py` and can be overridden via environment variab
 | `JOSHUA_VOICE_ENABLED` | `true` | Enable/disable voice output |
 | `JOSHUA_INFERENCE_DEVICE` | `cuda` | `cuda` or `cpu` |
 | `JOSHUA_POLL_INTERVAL` | `10` | Blackboard poll interval (seconds) |
-| `JOSHUA_LOG_FILE` | `/tmp/local_joshua.log` | Log file path |
+| `JOSHUA_LOG_FILE` | `/tmp/joshua.log` | Log file path |
 | `JOSHUA_LOG_LEVEL` | `INFO` | Log level |
 
 ### LLM Parameters
@@ -325,7 +325,7 @@ Joshua communicates with other agents via the Blackboard MCP server using JSON-R
     "params": {
         "name": "send_message",
         "arguments": {
-            "from_agent": "local_joshua",
+            "from_agent": "joshua",
             "to_agent": "operator",
             "content": "WOPR ONLINE. All subsystems nominal.",
             "message_type": "status"

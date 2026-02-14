@@ -6,7 +6,7 @@ Autonomous OSINT analyst agent running on Kali via Ollama.
 import os
 
 # === Identity ===
-AGENT_NAME = "local_joshua"
+AGENT_NAME = "joshua"
 AGENT_DISPLAY = "Local Joshua"
 
 # === Network ===
@@ -39,7 +39,7 @@ VOICE_ENABLED = os.environ.get("JOSHUA_VOICE_ENABLED", "true").lower() == "true"
 SPEAK_THRESHOLD = 50  # min response length to trigger voice
 
 # === Logging ===
-LOG_FILE = os.environ.get("JOSHUA_LOG_FILE", "/tmp/local_joshua.log")
+LOG_FILE = os.environ.get("JOSHUA_LOG_FILE", "/tmp/joshua.log")
 LOG_LEVEL = os.environ.get("JOSHUA_LOG_LEVEL", "INFO")
 
 # === System Prompt ===

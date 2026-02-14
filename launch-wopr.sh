@@ -74,9 +74,9 @@ fi
 # 6. Local Joshua Agent
 launch_service \
     "Local Joshua Agent" \
-    "python3.*local_joshua.*agent.py" \
+    "python3.*agent.py.*joshua" \
     "cd '$DIR' && python3 agent.py" \
-    "$LOG_DIR/local_joshua.log"
+    "$LOG_DIR/joshua.log"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
