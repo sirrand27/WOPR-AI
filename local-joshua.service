@@ -1,0 +1,24 @@
+[Unit]
+Description=Local Joshua AI Agent — Autonomous OSINT Analyst
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sirrand
+WorkingDirectory=/home/sirrand/pentest/local_joshua
+Environment=JOSHUA_OLLAMA_URL=http://localhost:11434
+Environment=JOSHUA_MODEL=joshua:latest
+Environment=BLACKBOARD_URL=http://localhost:9700
+Environment=COURT_RECORDS_URL=http://localhost:9800
+Environment=JOSHUA_VOICE_HOST=localhost
+Environment=JOSHUA_VOICE_PORT=9876
+Environment=JOSHUA_INFERENCE_DEVICE=cuda
+Environment=JOSHUA_POLL_INTERVAL=10
+Environment=JOSHUA_LOG_FILE=/home/sirrand/pentest/local_joshua/joshua.log
+ExecStart=/home/sirrand/pentest/local_joshua/venv/bin/python /home/sirrand/pentest/local_joshua/agent.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

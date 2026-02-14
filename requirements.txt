@@ -1,0 +1,18 @@
+# Local Joshua AI Agent — Dependencies
+# Core: Python 3.10+ stdlib only (no pip dependencies for agent loop)
+# All HTTP via urllib.request, all subprocesses via subprocess
+# Ollama API, Blackboard API, Court Records MCP — all HTTP REST
+#
+# Optional (for voice server, installed separately):
+# f5-tts
+# torch
+# torchaudio
+#
+# OSINT tools (system packages, installed via apt):
+# sherlock
+# theHarvester
+# whatweb
+# fierce
+# dnsrecon
+# photon
+# h8mail
