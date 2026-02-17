@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BLACKBOARD // MISSION CONTROL</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --fg: #00ff41;
+      --fg-dim: #008f23;
+      --fg-bright: #33ff66;
+      --accent: #00ccff;
+      --critical: #ff3333;
+      --high: #ff8800;
+      --medium: #ffcc00;
+      --low: #00ff41;
+      --info: #008f23;
+      --header-bg: #0d1a00;
+      --operator: #ffffff;
+      --operator-dim: #aaccaa;
+      --border: #1a3300;
+      --font: 'Courier New', Courier, monospace;
+      --handle-size: 5px;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+
+    /* ── Title Bar ─────────────────────────────── */
+    .title-bar {
+      background: var(--header-bg);
+      color: var(--fg-bright);
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      padding: 6px 8px;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .title-bar::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0px,
+        rgba(0, 255, 65, 0.03) 1px,
+        transparent 2px
+      );
+      pointer-events: none;
+    }
+
+    /* ── Mission Bar ───────────────────────────── */
+    .mission-bar {
+      padding: 4px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .mission-name {
+      color: var(--accent);
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .mission-detail {
+      color: var(--fg-dim);
+      font-size: 13px;
+      margin-top: 1px;
+    }
+
+    /* ── Stats Bar ─────────────────────────────── */
+    .stats-bar {
+      background: var(--header-bg);
+      padding: 3px 10px;
+      font-size: 13px;
+      color: var(--fg);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
+      flex-shrink: 0;
+    }
+
+    .stat-item { white-space: nowrap; }
+    .stat-value { color: var(--fg-bright); font-weight: bold; }
+
+    /* ── Heartbeat Bar ─────────────────────────── */
+    .heartbeat-bar {
+      padding: 3px 10px;
+      font-size: 13px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .hb-active { color: var(--fg-bright); }
+    .hb-idle { color: var(--medium); }
+    .hb-stalled { color: var(--critical); }
+    .hb-dim { color: var(--fg-dim); }
+
+    /* ── Section Headers ───────────────────────── */
+    .section-header {
+      color: var(--fg-bright);
+      font-size: 14px;
+      font-weight: bold;
+      padding: 4px 8px 3px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    /* ── Dashboard: 3-Pane Resizable Layout ────── */
+    .dashboard {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .top-row {
+      display: flex;
+      flex-direction: row;
+      min-height: 120px;
+      overflow: hidden;
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .pane-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
+    }
+
+    .task-pane {
+      flex: 0 0 50%;
+      border-right: 1px solid var(--border);
+    }
+
+    .comms-pane {
+      flex: 1;
+    }
+
+    .activity-pane {
+      min-height: 100px;
+    }
+
+    /* ── Resize Handles ────────────────────────── */
+    .resize-handle {
+      background: var(--border);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 5;
+    }
+
+    .resize-handle:hover,
+    .resize-handle.active {
+      background: var(--fg-dim);
+    }
+
+    .resize-handle-h {
+      height: var(--handle-size);
+      cursor: row-resize;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .resize-handle-v {
+      width: var(--handle-size);
+      cursor: col-resize;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .resize-handle::after {
+      content: '';
+      position: absolute;
+    }
+
+    .resize-handle-h::after {
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 2px;
+      border-top: 1px solid var(--fg-dim);
+      border-bottom: 1px solid var(--fg-dim);
+    }
+
+    .resize-handle-v::after {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      height: 40px;
+      width: 2px;
+      border-left: 1px solid var(--fg-dim);
+      border-right: 1px solid var(--fg-dim);
+    }
+
+    /* ── Task Board ────────────────────────────── */
+    .task-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .task-table th {
+      background: var(--header-bg);
+      color: var(--fg-bright);
+      text-align: left;
+      padding: 3px 6px;
+      font-size: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .task-table td {
+      padding: 3px 6px;
+      border-bottom: 1px solid #111;
+      vertical-align: top;
+    }
+
+    .task-table tr:nth-child(even) {
+      background: #0d0d0d;
+    }
+
+    .sts-in_progress { color: var(--accent); }
+    .sts-complete { color: var(--fg); }
+    .sts-pending { color: var(--fg-dim); }
+    .sts-blocked { color: var(--critical); }
+    .sts-failed { color: var(--critical); }
+    .sts-claimed { color: var(--medium); }
+
+    .task-title {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Agent Comms ───────────────────────────── */
+    .message {
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 0 8px;
+    }
+
+    .msg-ts { color: var(--fg-dim); }
+    .msg-joshua { color: #ffffff; }
+    .msg-tars_dev { color: var(--high); }
+    .msg-wopr { color: #ffffff; }
+    .msg-operator { color: var(--operator); }
+    .msg-system { color: var(--fg-dim); }
+    .msg-content { color: var(--fg); }
+    .msg-content-joshua { color: #ffffff; }
+    .msg-content-wopr { color: #ffffff; }
+    .msg-content-operator { color: var(--operator-dim); }
+    .msg-type-alert { color: var(--critical); font-weight: bold; }
+    .msg-type-directive { color: var(--fg-bright); font-weight: bold; }
+    .msg-type-request { color: var(--accent); }
+    .msg-type-handoff { color: var(--fg-bright); }
+
+    /* ── Live Activity Terminal ─────────────────── */
+    .terminal {
+      background: #050505;
+      padding: 4px 8px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .term-line { white-space: pre-wrap; word-break: break-all; }
+    .term-ts { color: var(--fg-dim); }
+    .term-prompt { color: var(--fg-bright); font-weight: bold; }
+    .term-cmd { color: var(--accent); font-weight: bold; }
+    .term-out { color: var(--fg-dim); }
+    .term-err { color: var(--critical); }
+    .term-exit-ok { color: var(--fg); }
+    .term-exit-fail { color: var(--high); }
+    .term-warn { color: var(--medium); }
+    .term-ok { color: var(--low); }
+    .term-status { color: #888888; }
+    .term-critical { color: var(--critical); font-weight: bold; }
+    @keyframes critical-flash { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .term-critical-line { animation: critical-flash 1s ease-in-out 3; }
+    .term-sep { color: var(--border); }
+    .term-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: var(--fg);
+      vertical-align: text-bottom;
+      animation: blink-cursor 0.6s step-end infinite;
+      margin-left: 1px;
+    }
+    @keyframes blink-cursor { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ── Findings Bar ──────────────────────────── */
+    .findings-bar {
+      background: var(--header-bg);
+      padding: 3px 10px;
+      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      flex-shrink: 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .finding-crit { color: var(--critical); font-weight: bold; }
+    .finding-high { color: var(--high); }
+    .finding-med { color: var(--medium); }
+    .finding-low { color: var(--fg); }
+    .finding-info { color: var(--fg-dim); }
+
+    /* ── Operator Input ────────────────────────── */
+    .operator-input {
+      background: var(--header-bg);
+      padding: 6px 8px;
+      border-top: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .input-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+
+    .input-label {
+      color: var(--fg-bright);
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .input-controls label {
+      color: var(--fg-dim);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .input-controls select {
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 3px 6px;
+      border-radius: 0;
+    }
+
+    #sendBtn {
+      background: var(--fg);
+      color: var(--bg);
+      border: none;
+      font-family: var(--font);
+      font-weight: bold;
+      font-size: 14px;
+      padding: 4px 14px;
+      cursor: pointer;
+      margin-left: auto;
+      border-radius: 0;
+    }
+
+    #sendBtn:active {
+      background: var(--fg-bright);
+    }
+
+    #msgInput {
+      background: var(--bg);
+      color: var(--fg-bright);
+      border: 1px solid var(--border);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 6px 8px;
+      width: 100%;
+      resize: none;
+      border-radius: 0;
+    }
+
+    #msgInput::placeholder {
+      color: var(--fg-dim);
+    }
+
+    #msgInput:focus, .input-controls select:focus {
+      outline: 1px solid var(--fg);
+      border-color: var(--fg);
+    }
+
+    /* ── Connection indicator ──────────────────── */
+    .conn-status {
+      position: fixed;
+      top: 4px;
+      right: 8px;
+      font-size: 14px;
+      z-index: 20;
+    }
+
+    .conn-ok { color: var(--fg-bright); }
+    .conn-err { color: var(--critical); }
+
+    /* ── Scrollbar styling ─────────────────────── */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #0a1400; }
+    ::-webkit-scrollbar-thumb { background: var(--fg-dim); border-radius: 4px; min-height: 30px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--fg); }
+
+    /* ── No-select during resize ───────────────── */
+    body.resizing { user-select: none; cursor: inherit; }
+    body.resizing * { cursor: inherit !important; }
+    body.resize-col { cursor: col-resize !important; }
+    body.resize-row { cursor: row-resize !important; }
+  </style>
+</head>
+<body>
+
+  <!-- DEFCON Alert Audio -->
+  <audio id="defconAlert" preload="auto" src="defcon.wav"></audio>
+
+  <!-- Title Bar -->
+  <header class="title-bar">[ BLACKBOARD // MISSION CONTROL ]</header>
+
+  <!-- Connection Status -->
+  <span class="conn-status conn-ok" id="connStatus">ONLINE</span>
+
+  <!-- Mission Bar -->
+  <section class="mission-bar">
+    <div class="mission-name" id="missionName">MISSION: Awaiting assignment...</div>
+    <div class="mission-detail" id="missionDetail"></div>
+  </section>
+
+  <!-- Stats Bar -->
+  <section class="stats-bar" id="statsBar">
+    <span class="stat-item">STANDING BY</span>
+  </section>
+
+  <!-- Heartbeat Bar -->
+  <section class="heartbeat-bar">
+    <span id="joshuaHB" class="hb-dim">JOSHUA: --</span>
+    <span id="woprHB" class="hb-dim">WOPR: --</span>
+    <span id="tarsHB" class="hb-dim">TARS DEV: --</span>
+  </section>
+
+  <!-- Dashboard: 3-Pane Resizable Layout -->
+  <div class="dashboard" id="dashboard">
+
+    <!-- Top Row: Task Board | Agent Comms -->
+    <div class="top-row" id="topRow">
+
+      <!-- Task Board -->
+      <div class="pane task-pane" id="taskPane">
+        <div class="section-header">[ TASK BOARD ]</div>
+        <div class="pane-content" id="taskScroll">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>STS</th>
+                <th>AGENT</th>
+                <th>PHASE</th>
+                <th>TASK</th>
+              </tr>
+            </thead>
+            <tbody id="taskBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Vertical Resize Handle -->
+      <div class="resize-handle resize-handle-v" id="vHandle"></div>
+
+      <!-- Agent Comms -->
+      <div class="pane comms-pane" id="commsPane">
+        <div class="section-header">[ AGENT COMMS ]</div>
+        <div class="pane-content" id="commsFeed"></div>
+      </div>
+
+    </div>
+
+    <!-- Horizontal Resize Handle -->
+    <div class="resize-handle resize-handle-h" id="hHandle"></div>
+
+    <!-- Live Activity -->
+    <div class="pane activity-pane" id="activityPane">
+      <div class="section-header">[ LIVE ACTIVITY ]</div>
+      <div class="pane-content terminal" id="terminal"></div>
+    </div>
+
+  </div>
+
+  <!-- Findings Bar -->
+  <section class="findings-bar" id="findingsBar">
+    <span>FINDINGS: --</span>
+  </section>
+
+  <!-- Operator Input -->
+  <section class="operator-input">
+    <div class="input-controls">
+      <span class="input-label">OPERATOR &gt;</span>
+      <label>TO:
+        <select id="recipientSelect">
+          <option value="all">ALL</option>
+          <option value="joshua">JOSHUA</option>
+          <option value="wopr">WOPR</option>
+          <option value="tars_dev">TARS DEV</option>
+        </select>
+      </label>
+      <label>TYPE:
+        <select id="typeSelect">
+          <option value="directive">DIRECTIVE</option>
+          <option value="info">INFO</option>
+          <option value="request">REQUEST</option>
+          <option value="alert">ALERT</option>
+        </select>
+      </label>
+      <button id="sendBtn">[ SEND ]</button>
+    </div>
+    <textarea id="msgInput" rows="1" placeholder="Enter directive..." enterkeyhint="send"></textarea>
+  </section>
+
+<script>
+// ── State ──────────────────────────────────────
+const state = {
+  knownMsgIds: new Set(),
+  renderedMsgIds: new Set(),
+  typewriterGen: 0,
+  lastActivityId: 0,
+  lastUnreadCount: 0
+};
+
+// ── Layout Persistence ─────────────────────────
+const LAYOUT_KEY = 'blackboard_layout_v1';
+
+function saveLayout() {
+  const dashboard = document.getElementById('dashboard');
+  const topRow = document.getElementById('topRow');
+  const taskPane = document.getElementById('taskPane');
+
+  const layout = {
+    topRatio: topRow.offsetHeight / dashboard.offsetHeight,
+    taskRatio: taskPane.offsetWidth / topRow.offsetWidth
+  };
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch(e) {}
+}
+
+function loadLayout() {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function applyLayout() {
+  const layout = loadLayout();
+  const dashboard = document.getElementById('dashboard');
+  const topRow = document.getElementById('topRow');
+  const taskPane = document.getElementById('taskPane');
+  const hHandle = document.getElementById('hHandle');
+  const vHandle = document.getElementById('vHandle');
+
+  const dashH = dashboard.offsetHeight;
+  const handleH = hHandle.offsetHeight;
+
+  const topRatio = layout ? layout.topRatio : 0.55;
+  const taskRatio = layout ? layout.taskRatio : 0.48;
+
+  const topH = Math.max(120, Math.min(dashH - 120 - handleH, dashH * topRatio));
+  topRow.style.height = topH + 'px';
+  topRow.style.flex = 'none';
+
+  const topW = topRow.offsetWidth;
+  const vHandleW = vHandle.offsetWidth;
+  const taskW = Math.max(200, Math.min(topW - 200 - vHandleW, topW * taskRatio));
+  taskPane.style.width = taskW + 'px';
+  taskPane.style.flex = 'none';
+}
+
+// ── Resize Logic ───────────────────────────────
+function initResize() {
+  const dashboard = document.getElementById('dashboard');
+  const topRow = document.getElementById('topRow');
+  const taskPane = document.getElementById('taskPane');
+  const hHandle = document.getElementById('hHandle');
+  const vHandle = document.getElementById('vHandle');
+
+  let dragging = null; // 'h' or 'v'
+  let startPos = 0;
+  let startSize = 0;
+
+  function onMouseDown(e, type) {
+    e.preventDefault();
+    dragging = type;
+    document.body.classList.add('resizing');
+    document.body.classList.add(type === 'v' ? 'resize-col' : 'resize-row');
+    (type === 'v' ? vHandle : hHandle).classList.add('active');
+
+    if (type === 'h') {
+      startPos = e.clientY;
+      startSize = topRow.offsetHeight;
+    } else {
+      startPos = e.clientX;
+      startSize = taskPane.offsetWidth;
+    }
+  }
+
+  function onMouseMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+
+    if (dragging === 'h') {
+      const delta = e.clientY - startPos;
+      const dashH = dashboard.offsetHeight;
+      const handleH = hHandle.offsetHeight;
+      const newH = Math.max(120, Math.min(dashH - 120 - handleH, startSize + delta));
+      topRow.style.height = newH + 'px';
+      topRow.style.flex = 'none';
+    } else {
+      const delta = e.clientX - startPos;
+      const topW = topRow.offsetWidth;
+      const vHandleW = vHandle.offsetWidth;
+      const newW = Math.max(200, Math.min(topW - 200 - vHandleW, startSize + delta));
+      taskPane.style.width = newW + 'px';
+      taskPane.style.flex = 'none';
+    }
+  }
+
+  function onMouseUp() {
+    if (!dragging) return;
+    (dragging === 'v' ? vHandle : hHandle).classList.remove('active');
+    document.body.classList.remove('resizing', 'resize-col', 'resize-row');
+    dragging = null;
+    saveLayout();
+  }
+
+  hHandle.addEventListener('mousedown', (e) => onMouseDown(e, 'h'));
+  vHandle.addEventListener('mousedown', (e) => onMouseDown(e, 'v'));
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+
+  // Touch support
+  hHandle.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    onMouseDown({ clientX: t.clientX, clientY: t.clientY, preventDefault(){} }, 'h');
+  }, { passive: false });
+
+  vHandle.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    onMouseDown({ clientX: t.clientX, clientY: t.clientY, preventDefault(){} }, 'v');
+  }, { passive: false });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    onMouseMove({ clientX: t.clientX, clientY: t.clientY, preventDefault(){} });
+  }, { passive: false });
+
+  document.addEventListener('touchend', onMouseUp);
+
+  // Apply saved layout
+  applyLayout();
+}
+
+// ── WOPR Teletype Sound Engine ─────────────────
+// Authentic WarGames WOPR terminal tick — sampled from the 1983 film.
+// Loaded as a tiny WAV (2.9KB, 30ms), played via Web Audio API for zero latency.
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let tickBuffer = null;
+
+// Load the authentic tick sample
+fetch('/tick.wav')
+  .then(r => r.arrayBuffer())
+  .then(buf => audioCtx.decodeAudioData(buf))
+  .then(decoded => { tickBuffer = decoded; })
+  .catch(() => {});
+
+let lastTickTime = 0;
+const tickGain = audioCtx.createGain();
+tickGain.gain.value = 0.20; // reduced 15% per operator directive
+tickGain.connect(audioCtx.destination);
+
+function playTick() {
+  if (!tickBuffer) return;
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+    return;
+  }
+  const now = audioCtx.currentTime;
+  const when = Math.max(now, lastTickTime + 0.008);
+  const src = audioCtx.createBufferSource();
+  src.buffer = tickBuffer;
+  src.connect(tickGain);
+  src.start(when);
+  lastTickTime = when;
+}
+
+// ── Teletype Animation Queue ──────────────────
+// ALL lines go through this queue after catch-up to maintain chronological order.
+// Animated lines type out character-by-character; instant lines appear immediately
+// but wait their turn so they never leapfrog an in-progress typewriter.
+const typeQueue = [];
+let typeRunning = false;
+
+function enqueueTypeline(container, htmlPrefix, text, cssClass, scrollTarget, onDone) {
+  typeQueue.push({ mode: 'typewrite', container, htmlPrefix, text, cssClass, scrollTarget, onDone });
+  if (!typeRunning) drainTypeQueue();
+}
+
+function enqueueInstant(container, el, scrollTarget, onDone) {
+  typeQueue.push({ mode: 'instant', container, el, scrollTarget, onDone });
+  if (!typeRunning) drainTypeQueue();
+}
+
+function drainTypeQueue() {
+  if (typeQueue.length === 0) { typeRunning = false; return; }
+  typeRunning = true;
+  const job = typeQueue.shift();
+
+  if (job.mode === 'instant') {
+    job.container.appendChild(job.el);
+    if (job.scrollTarget) autoScroll(job.scrollTarget);
+    if (job.onDone) job.onDone();
+    drainTypeQueue(); // next immediately — no async wait
+    return;
+  }
+
+  typeLine(job.container, job.htmlPrefix, job.text, job.cssClass, job.scrollTarget, () => {
+    if (job.onDone) job.onDone();
+    drainTypeQueue();
+  });
+}
+
+function typeLine(container, htmlPrefix, text, cssClass, scrollTarget, onDone) {
+  const lineEl = document.createElement('div');
+  lineEl.className = 'term-line';
+  lineEl.innerHTML = htmlPrefix;
+  const span = document.createElement('span');
+  span.className = cssClass;
+  lineEl.appendChild(span);
+
+  // Blinking cursor
+  const cursor = document.createElement('span');
+  cursor.className = 'term-cursor';
+  lineEl.appendChild(cursor);
+  container.appendChild(lineEl);
+
+  let i = 0;
+  const escaped = escapeHtml(text);
+  const chars = [...escaped];
+
+  // WarGames movie timing: ~60ms median per char, ~350ms on spaces/word breaks
+  function tick() {
+    if (i < chars.length) {
+      span.innerHTML += chars[i];
+      i++;
+      playTick();
+      if (scrollTarget) autoScroll(scrollTarget);
+      const ch = chars[i - 1];
+      const jitter = Math.random() * 30 - 15;
+      let delay;
+      if (ch === ' ') {
+        delay = 120 + jitter; // word break pause
+      } else if (ch === '\n') {
+        delay = 300;          // line break
+      } else {
+        delay = 60 + jitter;  // character: ~60ms median
+      }
+      setTimeout(tick, Math.max(20, delay));
+    } else {
+      cursor.remove();
+      if (scrollTarget) autoScroll(scrollTarget);
+      if (onDone) onDone();
+    }
+  }
+  tick();
+}
+
+// ── Utilities ──────────────────────────────────
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function utcToCST(isoString) {
+  if (!isoString) return '--:--:--';
+  try {
+    const dt = new Date(isoString);
+    const cst = new Date(dt.getTime() - 6 * 60 * 60 * 1000);
+    return cst.toISOString().split('T')[1].substring(0, 8);
+  } catch (e) {
+    return isoString.split('T')[1]?.substring(0, 8) || '--:--:--';
+  }
+}
+
+function formatAgo(seconds) {
+  if (seconds < 60) return Math.floor(seconds) + 's ago';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+  return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm ago';
+}
+
+// ── Render: Mission ────────────────────────────
+function renderMission(mission) {
+  if (!mission) return;
+  const el = document.getElementById('missionName');
+  const detail = document.getElementById('missionDetail');
+  el.textContent = `MISSION: ${mission.name || 'Unknown'}  |  TARGET: ${mission.target_subnet || ''}  |  ROE: ${mission.roe || ''}  |  STATUS: ${(mission.status || '').toUpperCase()}`;
+
+  let objectives = mission.objectives || [];
+  if (typeof objectives === 'string') {
+    try { objectives = JSON.parse(objectives); } catch(e) { objectives = []; }
+  }
+  detail.textContent = objectives.length > 0 ? 'OBJ: ' + objectives.slice(0, 2).join(' | ') : '';
+}
+
+// ── Render: Stats ──────────────────────────────
+function renderStats(stats) {
+  if (!stats) return;
+  const bar = document.getElementById('statsBar');
+  const tc = stats.task_counts || {};
+  const total = Object.values(tc).reduce((a, b) => a + b, 0);
+  const complete = tc.complete || 0;
+  const now = new Date();
+  const cst = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+  const timeStr = cst.toISOString().split('T')[1].substring(0, 8);
+
+  bar.innerHTML =
+    `<span class="stat-item">TASKS: <span class="stat-value">${complete}/${total}</span></span>` +
+    `<span class="stat-item">HOSTS: <span class="stat-value">${stats.host_count || 0}</span></span>` +
+    `<span class="stat-item">TRAINING: <span class="stat-value">${stats.training_examples_count || 0}</span></span>` +
+    `<span class="stat-item">UPDATED: <span class="stat-value">${timeStr}</span></span>`;
+}
+
+// ── Render: Heartbeats ─────────────────────────
+function renderHeartbeats(heartbeats) {
+  if (!heartbeats) return;
+  const STALL = 300, IDLE = 60;
+  const now = Date.now();
+
+  const agents = [
+    ['joshua', 'joshuaHB', 'JOSHUA'],
+    ['wopr', 'woprHB', 'WOPR'],
+    ['tars_dev', 'tarsHB', 'TARS DEV']
+  ];
+
+  for (const [agent, elId, display] of agents) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    const ts = heartbeats[agent];
+    if (!ts) {
+      el.textContent = `${display}: NO DATA`;
+      el.className = 'hb-dim';
+      continue;
+    }
+    const delta = (now - new Date(ts).getTime()) / 1000;
+    const ago = formatAgo(delta);
+
+    if (delta < IDLE) {
+      el.textContent = `${display}: ACTIVE (${ago})`;
+      el.className = 'hb-active';
+    } else if (delta < STALL) {
+      el.textContent = `${display}: IDLE (${ago})`;
+      el.className = 'hb-idle';
+    } else {
+      el.textContent = `${display}: STALLED (${ago})`;
+      el.className = 'hb-stalled';
+    }
+  }
+}
+
+// ── Render: Tasks ──────────────────────────────
+function renderTasks(tasks) {
+  if (!tasks) return;
+  const body = document.getElementById('taskBody');
+
+  const statusIcons = {
+    pending: '[ ]', claimed: '[~]', in_progress: '[>]',
+    blocked: '[!]', complete: '[+]', failed: '[X]'
+  };
+
+  const statusOrder = {
+    in_progress: 1, claimed: 2, pending: 3, blocked: 4, complete: 5, failed: 6
+  };
+
+  tasks.sort((a, b) =>
+    (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9) ||
+    (a.created_at || '').localeCompare(b.created_at || '')
+  );
+
+  body.innerHTML = tasks.map(t => {
+    const icon = statusIcons[t.status] || t.status;
+    const agent = t.assigned_to || '--';
+    const title = (t.title || '').substring(0, 60);
+    const stsClass = 'sts-' + (t.status || 'pending');
+    return `<tr>
+      <td class="${stsClass}">${escapeHtml(icon)}</td>
+      <td>${escapeHtml(agent)}</td>
+      <td>${escapeHtml(t.phase || '')}</td>
+      <td class="task-title" title="${escapeHtml(t.title || '')}">${escapeHtml(title)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Render: Messages ───────────────────────────
+function renderMessages(messages) {
+  if (!messages) return;
+  const feed = document.getElementById('commsFeed');
+  const needFullRebuild = state.renderedMsgIds.size === 0;
+
+  if (needFullRebuild) {
+    // Full rebuild: cancel any in-flight typewriters, render all static
+    state.typewriterGen++;
+    feed.innerHTML = '';
+    state.renderedMsgIds.clear();
+
+    messages.forEach(m => {
+      state.knownMsgIds.add(m.id);
+      state.renderedMsgIds.add(m.id);
+      renderSingleMessage(feed, m, false);
+    });
+    forceBottom(feed);
+    return;
+  }
+
+  // Incremental: only append messages not yet in the DOM
+  const newMessages = messages.filter(m => !state.renderedMsgIds.has(m.id));
+  if (newMessages.length === 0) return;
+
+  if (navigator.vibrate) {
+    const pattern = newMessages.slice(0, 3).flatMap(() => [200, 100]);
+    navigator.vibrate(pattern);
+  }
+
+  newMessages.forEach(m => {
+    state.knownMsgIds.add(m.id);
+    state.renderedMsgIds.add(m.id);
+    renderSingleMessage(feed, m, true);
+  });
+
+  autoScroll(feed);
+}
+
+function renderSingleMessage(container, msg, animate) {
+  const div = document.createElement('div');
+  div.className = 'message';
+
+  const ts = utcToCST(msg.created_at);
+  const from = (msg.from_agent || 'system').toUpperCase();
+  const to = msg.to_agent === 'all' ? 'ALL' : (msg.to_agent || '').toUpperCase();
+  const fromClass = 'msg-' + (msg.from_agent || 'system');
+
+  let typeHtml = '';
+  if (msg.message_type === 'alert') typeHtml = ' <span class="msg-type-alert">[ALERT]</span>';
+  else if (msg.message_type === 'directive') typeHtml = ' <span class="msg-type-directive">[DIRECTIVE]</span>';
+  else if (msg.message_type === 'request') typeHtml = ' <span class="msg-type-request">[REQ]</span>';
+  else if (msg.message_type === 'handoff') typeHtml = ' <span class="msg-type-directive">[HANDOFF]</span>';
+
+  const contentClassMap = { operator: 'msg-content-operator', joshua: 'msg-content-joshua', wopr: 'msg-content-wopr' };
+  const contentClass = contentClassMap[msg.from_agent] || 'msg-content';
+  const header = `<span class="msg-ts">[${ts}]</span> <span class="${fromClass}">${from}</span> <span class="msg-ts">-&gt; ${to}</span>${typeHtml}`;
+
+  if (animate) {
+    div.innerHTML = header + '\n  ';
+    container.appendChild(div);
+    autoScroll(container); // scroll to show new message before typing starts
+    typewriterEffect(div, msg.content || '', contentClass);
+  } else {
+    div.innerHTML = header + `\n  <span class="${contentClass}">${escapeHtml(msg.content || '')}</span>`;
+    container.appendChild(div);
+  }
+}
+
+function typewriterEffect(el, text, className) {
+  const gen = state.typewriterGen; // capture generation to detect cancellation
+  let i = 0;
+  const span = document.createElement('span');
+  span.className = className;
+  el.appendChild(span);
+  const cursor = document.createElement('span');
+  cursor.className = 'term-cursor';
+  el.appendChild(cursor);
+
+  const feed = document.getElementById('commsFeed');
+
+  function tick() {
+    // If generation changed, a full rebuild happened — stop silently
+    if (gen !== state.typewriterGen) {
+      try { cursor.remove(); } catch(e) {}
+      return;
+    }
+    if (i < text.length) {
+      span.textContent += text[i];
+      i++;
+      playTick();
+      const ch = text[i - 1];
+      const jitter = Math.random() * 10 - 5;
+      let delay;
+      if (ch === ' ') {
+        delay = 35 + jitter;
+      } else if (ch === '\n') {
+        delay = 80;
+      } else {
+        delay = 18 + jitter;
+      }
+      setTimeout(tick, Math.max(8, delay));
+    } else {
+      cursor.remove();
+    }
+    // Scroll the message div itself (has max-height 200px, own scrollbar)
+    el.scrollTop = el.scrollHeight;
+    // Scroll the feed container
+    if (feed) autoScroll(feed);
+  }
+  tick();
+}
+
+// ── Smart Auto-Scroll ──────────────────────────
+// Persistent follow-state per pane: follows new content (including mid-typewriter)
+// until the user scrolls up. Re-engages when user scrolls back to bottom.
+const _scrollFollow = {};
+
+function initScrollTracking() {
+  ['terminal', 'commsFeed'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    _scrollFollow[id] = { following: true, lastAuto: 0 };
+    el.addEventListener('scroll', () => {
+      const st = _scrollFollow[id];
+      // Ignore scroll events caused by our own programmatic scrolling
+      if (Date.now() - st.lastAuto < 100) return;
+      // User scroll: re-engage if they scrolled near the bottom, disengage if up
+      const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 80;
+      st.following = nearBottom;
+    });
+  });
+}
+
+function autoScroll(el) {
+  const st = _scrollFollow[el.id];
+  if (!st || !st.following) return;
+  st.lastAuto = Date.now();
+  el.scrollTop = el.scrollHeight;
+}
+
+function forceBottom(el) {
+  const st = _scrollFollow[el.id];
+  if (st) {
+    st.following = true;
+    st.lastAuto = Date.now();
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Render: Activity ───────────────────────────
+// Two-phase approach: boot does a tight catch-up loop (all pages, no animation),
+// then setInterval starts for live-only updates (with animation).
+const ANIMATE_TYPES = new Set(['WARN', 'OK', 'CRITICAL']); // only important events animate
+
+function appendActivity(rawData) {
+  if (!rawData || !rawData.trim()) return;
+  const terminal = document.getElementById('terminal');
+  const lines = rawData.split('\n').filter(l => l.trim());
+  const pastCatchup = arguments[1] !== true; // second arg = catchingUp flag
+
+  while (terminal.children.length > 500) {
+    terminal.removeChild(terminal.firstChild);
+  }
+
+  for (const line of lines) {
+    const parts = line.split('|', 3);
+    if (parts.length < 2) continue;
+
+    const type = parts[0].trim();
+    const ts = parts[1].trim();
+    const payload = parts[2] || '';
+
+    // Map entry types to their CSS class and optional prefix
+    const typeMap = {
+      CMD:      { prefix: `<span class="term-ts">[${escapeHtml(ts)}]</span> <span class="term-prompt">$</span> `, cls: 'term-cmd' },
+      ERR:      { prefix: '  ', cls: 'term-err' },
+      WARN:     { prefix: `<span class="term-ts">[${escapeHtml(ts)}]</span> `, cls: 'term-warn' },
+      OK:       { prefix: `<span class="term-ts">[${escapeHtml(ts)}]</span> `, cls: 'term-ok' },
+      STATUS:   { prefix: `<span class="term-ts">[${escapeHtml(ts)}]</span> `, cls: 'term-status' },
+      CRITICAL: { prefix: `<span class="term-ts">[${escapeHtml(ts)}]</span> `, cls: 'term-critical', extraCls: 'term-critical-line', payloadPrefix: '\u26a0 ' },
+      OUT:      { prefix: '  ', cls: 'term-out' },
+    };
+
+    // Build END elements (exit code + separator)
+    if (type === 'END') {
+      const code = payload.trim();
+      const frag = document.createDocumentFragment();
+      const lineEl = document.createElement('div');
+      lineEl.className = 'term-line';
+      lineEl.innerHTML = `  <span class="${code === '0' ? 'term-exit-ok' : 'term-exit-fail'}">exit ${escapeHtml(code)}</span>`;
+      frag.appendChild(lineEl);
+      const sep = document.createElement('div');
+      sep.className = 'term-sep';
+      sep.textContent = '\u2500'.repeat(40);
+      frag.appendChild(sep);
+
+      if (pastCatchup) {
+        enqueueInstant(terminal, frag, terminal);
+      } else {
+        terminal.appendChild(frag);
+      }
+      continue;
+    }
+
+    const mapping = typeMap[type] || { prefix: `<span class="term-ts">[${escapeHtml(ts)}]</span> `, cls: 'term-out' };
+    const displayText = (mapping.payloadPrefix || '') + payload;
+    const shouldAnimate = pastCatchup && ANIMATE_TYPES.has(type);
+
+    if (pastCatchup) {
+      // ALL lines go through the queue after catch-up to maintain order.
+      // Animated lines type out; non-animated lines appear instantly but wait their turn.
+      if (shouldAnimate) {
+        enqueueTypeline(terminal, mapping.prefix, displayText, mapping.cls, terminal, () => {
+          if (type === 'CRITICAL') {
+            const lastLine = terminal.lastElementChild;
+            if (lastLine && mapping.extraCls) lastLine.classList.add(mapping.extraCls);
+            try { document.getElementById('defconAlert').currentTime = 0; document.getElementById('defconAlert').play(); } catch(e) {}
+          }
+        });
+      } else {
+        const lineEl = document.createElement('div');
+        lineEl.className = 'term-line' + (mapping.extraCls ? ' ' + mapping.extraCls : '');
+        lineEl.innerHTML = mapping.prefix + `<span class="${mapping.cls}">${escapeHtml(displayText)}</span>`;
+        enqueueInstant(terminal, lineEl, terminal, type === 'CRITICAL' ? () => {
+          try { document.getElementById('defconAlert').currentTime = 0; document.getElementById('defconAlert').play(); } catch(e) {}
+        } : null);
+      }
+    } else {
+      // Catch-up: direct append, no animation, no queue
+      const lineEl = document.createElement('div');
+      lineEl.className = 'term-line' + (mapping.extraCls ? ' ' + mapping.extraCls : '');
+      lineEl.innerHTML = mapping.prefix + `<span class="${mapping.cls}">${escapeHtml(displayText)}</span>`;
+      terminal.appendChild(lineEl);
+      if (type === 'CRITICAL') {
+        try { document.getElementById('defconAlert').currentTime = 0; document.getElementById('defconAlert').play(); } catch(e) {}
+      }
+    }
+  }
+
+  // Force to bottom during catch-up, smart scroll after
+  if (!pastCatchup) {
+    forceBottom(terminal);
+  } else {
+    autoScroll(terminal);
+  }
+}
+
+// ── Render: Findings ───────────────────────────
+function renderFindings(findings) {
+  if (!findings) return;
+  const bar = document.getElementById('findingsBar');
+  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
+  findings.forEach(f => {
+    const sev = f.severity || 'INFO';
+    if (sev in counts) counts[sev]++;
+  });
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  bar.innerHTML =
+    `<span>FINDINGS: <b>${total}</b></span>` +
+    `<span class="finding-crit">CRIT: ${counts.CRITICAL}</span>` +
+    `<span class="finding-high">HIGH: ${counts.HIGH}</span>` +
+    `<span class="finding-med">MED: ${counts.MEDIUM}</span>` +
+    `<span class="finding-low">LOW: ${counts.LOW}</span>` +
+    `<span class="finding-info">INFO: ${counts.INFO}</span>`;
+}
+
+// ── Polling ────────────────────────────────────
+let connOk = true;
+
+async function pollDashboard() {
+  try {
+    const resp = await fetch('/api/dashboard');
+    if (!resp.ok) throw new Error(resp.status);
+    const data = await resp.json();
+
+    renderMission(data.mission);
+    renderStats(data.stats);
+    renderHeartbeats(data.heartbeats);
+    renderTasks(data.tasks);
+    renderMessages(data.messages);
+    renderFindings(data.findings);
+
+    if (!connOk) {
+      connOk = true;
+      document.getElementById('connStatus').textContent = 'ONLINE';
+      document.getElementById('connStatus').className = 'conn-status conn-ok';
+    }
+  } catch (e) {
+    connOk = false;
+    document.getElementById('connStatus').textContent = 'OFFLINE';
+    document.getElementById('connStatus').className = 'conn-status conn-err';
+  }
+}
+
+// Fast catch-up: pages through ALL historical activity (no animation) before live polling starts
+async function catchUpActivity() {
+  while (true) {
+    try {
+      const resp = await fetch(`/api/activity?since=${state.lastActivityId}`);
+      if (!resp.ok) break;
+      const data = await resp.json();
+      const hasData = data.data && data.data.trim();
+      if (hasData) appendActivity(data.data, true); // true = catching up, no animation
+      const newOffset = data.offset || state.lastActivityId;
+      if (!hasData || newOffset === state.lastActivityId) break; // reached the tip
+      state.lastActivityId = newOffset;
+    } catch (e) { break; }
+  }
+}
+
+let _activityPolling = false;
+
+async function pollActivity() {
+  if (_activityPolling) return;
+  _activityPolling = true;
+  try {
+    const resp = await fetch(`/api/activity?since=${state.lastActivityId}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.data && data.data.trim()) appendActivity(data.data); // live mode — animates
+    state.lastActivityId = data.offset || state.lastActivityId;
+  } catch (e) { /* silent */ }
+  finally { _activityPolling = false; }
+}
+
+// ── Operator Send ──────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const content = input.value.trim();
+  if (!content) return;
+
+  const to = document.getElementById('recipientSelect').value;
+  const type = document.getElementById('typeSelect').value;
+  const btn = document.getElementById('sendBtn');
+
+  input.value = '';
+  btn.textContent = '[ QUEUED ]';
+  btn.style.background = 'var(--medium)';
+  btn.style.color = 'var(--bg)';
+
+  try {
+    const resp = await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from_agent: 'operator',
+        to_agent: to,
+        content: content,
+        message_type: type
+      })
+    });
+    if (resp.ok) {
+      btn.textContent = '[ SENT ]';
+      btn.style.background = 'var(--fg-bright)';
+      state.knownMsgIds.clear();
+      state.renderedMsgIds.clear(); // force full comms rebuild after send
+      pollDashboard();
+    } else {
+      throw new Error('Send failed');
+    }
+  } catch (e) {
+    btn.textContent = '[ FAIL ]';
+    btn.style.background = 'var(--critical)';
+    btn.style.color = 'var(--bg)';
+  }
+
+  setTimeout(() => {
+    btn.textContent = '[ SEND ]';
+    btn.style.background = 'var(--fg)';
+    btn.style.color = 'var(--bg)';
+  }, 1500);
+}
+
+// ── Event Bindings ─────────────────────────────
+// Resume audio context on first click (browser autoplay policy)
+document.addEventListener('click', () => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: true });
+
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+document.getElementById('msgInput').addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ── Visibility: pause polling when hidden ──────
+let dashInterval, actInterval;
+
+function startPolling() {
+  pollDashboard();
+  dashInterval = setInterval(pollDashboard, 5000);
+  // Catch up on all history pages (no animation), THEN start live polling
+  catchUpActivity().then(() => {
+    actInterval = setInterval(pollActivity, 2000);
+  });
+}
+
+function stopPolling() {
+  clearInterval(dashInterval);
+  clearInterval(actInterval);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    startPolling();
+  }
+});
+
+// ── Handle window resize ───────────────────────
+window.addEventListener('resize', () => {
+  // Re-clamp pane sizes on window resize
+  const dashboard = document.getElementById('dashboard');
+  const topRow = document.getElementById('topRow');
+  const taskPane = document.getElementById('taskPane');
+  const hHandle = document.getElementById('hHandle');
+  const vHandle = document.getElementById('vHandle');
+
+  const dashH = dashboard.offsetHeight;
+  const handleH = hHandle.offsetHeight;
+  const topH = topRow.offsetHeight;
+  const clamped = Math.max(120, Math.min(dashH - 120 - handleH, topH));
+  if (clamped !== topH) {
+    topRow.style.height = clamped + 'px';
+  }
+
+  const topW = topRow.offsetWidth;
+  const vHandleW = vHandle.offsetWidth;
+  const taskW = taskPane.offsetWidth;
+  const clampedW = Math.max(200, Math.min(topW - 200 - vHandleW, taskW));
+  if (clampedW !== taskW) {
+    taskPane.style.width = clampedW + 'px';
+  }
+});
+
+// ── Service Worker Registration ────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ── Boot ───────────────────────────────────────
+initResize();
+initScrollTracking();
+startPolling();
+</script>
+</body>
+</html>

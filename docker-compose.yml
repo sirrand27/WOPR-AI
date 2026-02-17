@@ -1,0 +1,172 @@
+# ═══════════════════════════════════════════════════════════
+# W.O.P.R. Standalone Sentry — Jetson Orin Nano 8GB
+# Docker Compose Stack (ARM64/aarch64)
+# ═══════════════════════════════════════════════════════════
+#
+# Architecture: Option A — Fully Standalone
+# All services run locally on Jetson. No Kali dependency.
+#
+# Memory Budget (8GB unified):
+#   Ollama Q4    ~4.5 GB (GPU)
+#   WOPR Agent   ~200 MB (CPU)
+#   Blackboard   ~100 MB (CPU)
+#   UniFi MCP    ~50 MB  (CPU)
+#   Piper TTS    ~200 MB (CPU)
+#   OS/overhead  ~1.5 GB
+#   Headroom     ~1.4 GB
+#
+# GPU: Sequential access only — Ollama holds GPU exclusively.
+
+services:
+
+  # ─── Ollama (LLM inference, GPU) ─────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: wopr-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
+    runtime: nvidia
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ─── Blackboard MCP Server (coordination surface) ───────
+  blackboard:
+    build:
+      context: ./blackboard
+      dockerfile: Dockerfile
+    container_name: wopr-blackboard
+    restart: unless-stopped
+    ports:
+      - "${BLACKBOARD_PORT:-9700}:9700"
+    volumes:
+      - blackboard-data:/data/blackboard
+      - ./blackboard/server.py:/app/server.py:ro
+      - ./blackboard/database.py:/app/database.py:ro
+      - ./blackboard/training.py:/app/training.py:ro
+      - ./blackboard/pwa:/app/pwa:ro
+    environment:
+      - BLACKBOARD_HOST=0.0.0.0
+      - BLACKBOARD_PORT=9700
+      - BLACKBOARD_DB_PATH=/data/blackboard/blackboard.db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9700/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # ─── UniFi MCP Server (network defense) ─────────────────
+  unifi-mcp:
+    build:
+      context: ./unifi-mcp
+      dockerfile: Dockerfile
+    container_name: wopr-unifi-mcp
+    restart: unless-stopped
+    ports:
+      - "${UNIFI_MCP_PORT:-9600}:9600"
+    volumes:
+      - ./unifi-mcp/server.py:/app/server.py:ro
+      - ./unifi-mcp/unifi_client.py:/app/unifi_client.py:ro
+      - ./unifi-mcp/syslog_listener.py:/app/syslog_listener.py:ro
+      - ./unifi-mcp/models.py:/app/models.py:ro
+    environment:
+      - UNIFI_HOST=${UNIFI_HOST}
+      - UNIFI_PORT=${UNIFI_PORT:-443}
+      - UNIFI_USER=${UNIFI_USER}
+      - UNIFI_PASS=${UNIFI_PASS}
+      - UNIFI_SITE=${UNIFI_SITE:-default}
+      - UNIFI_VERIFY_SSL=${UNIFI_VERIFY_SSL:-0}
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=9600
+    depends_on:
+      blackboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('localhost',9600)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  # ─── WOPR Sentry Agent (main defense loop) ──────────────
+  wopr:
+    build:
+      context: ./wopr
+      dockerfile: Dockerfile
+    container_name: wopr-agent
+    restart: unless-stopped
+    volumes:
+      - wopr-data:/data/wopr
+      - logs:/data/logs
+      - ./wopr:/app:ro
+    environment:
+      - DEVICE_DB_PATH=${DEVICE_DB_PATH:-/data/wopr/wopr_devices.db}
+      - TRAINING_DATA_DIR=${TRAINING_DATA_DIR:-/data/wopr/training_data}
+      - LOG_FILE=${LOG_FILE:-/data/logs/wopr.log}
+      - BLACKBOARD_URL=http://blackboard:9700
+      - UNIFI_MCP_URL=http://unifi-mcp:9600
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${WOPR_MODEL:-joshua:cybersec}
+      - VOICE_HOST=voice
+      - VOICE_PORT=9876
+      - FLIPPER_MCP_URL=${FLIPPER_MCP_URL:-}
+    depends_on:
+      ollama:
+        condition: service_healthy
+      blackboard:
+        condition: service_healthy
+      unifi-mcp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # ─── Piper TTS (lightweight voice, CPU-only) ────────────
+  voice:
+    build:
+      context: ./voice
+      dockerfile: Dockerfile
+    container_name: wopr-voice
+    restart: unless-stopped
+    ports:
+      - "${VOICE_PORT:-9876}:9876"
+    volumes:
+      - voice-data:/data/voice
+      - ./voice/voice_server.py:/app/voice_server.py:ro
+    environment:
+      - PIPER_VOICE=${PIPER_VOICE:-en_US-lessac-medium}
+      - PIPER_DATA_DIR=/data/voice
+      - LISTEN_HOST=0.0.0.0
+      - LISTEN_PORT=9876
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(5); s.connect(('localhost',9876)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  ollama-data:
+    driver: local
+  blackboard-data:
+    driver: local
+  wopr-data:
+    driver: local
+  voice-data:
+    driver: local
+  logs:
+    driver: local
