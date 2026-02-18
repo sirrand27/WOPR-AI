@@ -79,11 +79,17 @@ All services use **bind-mounted volumes** for live code updates without containe
 │  │  │ Monitor  │  │  Knowledge   │  │ + Suppression Window   │  │  │
 │  │  │ (AxeOS)  │  │  Base        │  │                        │  │  │
 │  │  └──────────┘  └──────────────┘  └────────────────────────┘  │  │
+│  │                                                               │  │
+│  │  ┌──────────┐  ┌──────────────┐  ┌────────────────────────┐  │  │
+│  │  │Correlation│  │  Incident   │  │ Threat Intelligence    │  │  │
+│  │  │ Engine   │  │  Timelines   │  │ (abuse.ch feeds)       │  │  │
+│  │  │(RF+Net)  │  │  (HIGH+)     │  │ C2 IPs + domains       │  │  │
+│  │  └──────────┘  └──────────────┘  └────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │                                                                     │
 │  ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────────┐   │
 │  │Blackboard│  │Mission Control│  │  Ollama  │  │  Piper TTS   │   │
-│  │MCP :9700 │  │  PWA (v29)   │  │  :11434  │  │    :9876     │   │
+│  │MCP :9700 │  │  PWA (v30)   │  │  :11434  │  │    :9876     │   │
 │  │(auth+MCP)│  │(WarGames UI) │  │joshua:cs │  │ (voice alert)│   │
 │  └──────────┘  └──────────────┘  └──────────┘  └──────────────┘   │
 │                                                                     │
@@ -114,18 +120,52 @@ All services use **bind-mounted volumes** for live code updates without containe
 - Defense cycle status logged internally (no Live Activity clutter)
 - Hourly diagnostics posted only when subsystems are degraded
 
+### Cross-Layer Correlation Engine
+- Sliding-window correlation of RF events (Marauder) with network events (UniFi)
+- Dual ring buffers with configurable window (default 120s)
+- **Evil Twin detection**: deauth attack + rogue AP with matching SSID → CRITICAL
+- **Deauth→Reconnect**: deauth targeting client + reconnect to different AP → HIGH
+- **Probe→Associate**: suspicious probe from MAC + same device joins network → HIGH
+- **Coordinated Attack**: 3+ deauth targets or 2+ sources + population spike → CRITICAL
+- Per-(type, MAC) dedup with 5-minute cooldown to prevent alert floods
+- Recursion-safe: synthetic correlated anomalies won't re-trigger correlation checks
+
+### Incident Timelines
+- Automated context snapshots on HIGH+ severity events
+- Captures 8 context sources: recent anomalies, device profile, posture state, RF status, diagnostics, miner fleet, correlation engine, baseline state
+- Per-(MAC, type) dedup window (default 10 min) prevents timeline floods
+- Human-readable summary + structured JSON evidence posted to Blackboard
+- Context buffer records ALL anomalies (even suppressed) for complete situational awareness
+
+### Threat Intelligence (abuse.ch Feeds)
+- Pulls from 3 public threat feeds (no API keys required):
+  - **Feodo Tracker**: C2 server IPs (Emotet, Dridex, TrickBot, QakBot)
+  - **URLhaus**: currently-online malicious URLs → extracted IPs and domains
+  - **ThreatFox**: IoC hostfile (malicious domains)
+- SQLite persistence + in-memory `set()` for O(1) lookup (~2K IPs, ~48K domains)
+- Daily feed refresh (configurable), survives container restarts via DB cache
+- Cross-references UniFi client IPs against threat database every 10th defense cycle
+- Matches produce `threat_intel_match` anomaly at CRITICAL severity
+
 ### RF Monitoring (ESP32 Marauder)
 - ESP32 Marauder connected via Flipper Zero USB-UART bridge
 - 4-phase scan cycle: AP scan → deauth detection → probe request capture → pwnagotchi detection
 - Real-time deauth attack detection with source/target/channel tracking
 - Probe request intelligence — device fingerprinting from broadcast probes
 - Pwnagotchi detection via beacon frame fingerprinting
+- RF events fed into Correlation Engine for cross-layer compound attack detection
 - Integrated into defense status and Mission Control radar display
 
 ### Miner Fleet Monitoring
-- AxeOS BitAxe miner fleet management (HTTP API polling)
+- AxeOS BitAxe miner fleet management (HTTP API polling for 7 AxeOS miners)
+- Public Pool API integration for full 27-worker fleet (AxeOS + NerdMiners + cgminers)
 - Real-time hashrate, temperature, and efficiency tracking
 - Temperature-based alerts (65C warning, 75C critical restart)
+- **Auto-restart offline miners** after configurable consecutive failures (default 5)
+- **Sustained hashrate drop detection**: alerts after N consecutive polls below 50% of average
+- **Near-zero hashrate detection**: immediate alert when hashrate drops below 0.01 GH/s (possible firmware compromise)
+- **Pool failover recovery verification**: snapshots worker states on outage, verifies all workers reconnect after recovery
+- **Per-miner health scoring** (0-100, A-F grade): temperature (25%), hashrate stability (25%), uptime (20%), share quality (15%), WiFi RSSI (15%)
 - Pool failover detection and reporting
 - Share quality monitoring and anomaly detection
 - Fleet summary in W.O.P.R. status reports
@@ -145,7 +185,7 @@ All services use **bind-mounted volumes** for live code updates without containe
 - **API key authentication** on all `/api/*` and `/mcp` endpoints (Bearer token)
 - Graceful auth disable when `BLACKBOARD_API_KEY` is unset (backward compatible)
 
-### Mission Control PWA (v29)
+### Mission Control PWA (v30)
 - Browser-based dashboard served at port 9700
 - **WarGames visual theme**: CRT scanline overlay, screen vignette, phosphor glow
 - **API key auth overlay** with localStorage persistence and lock-to-logout
@@ -183,14 +223,18 @@ WOPR-AI/
 │   ├── agent.py                 #   Defense sentry loop + inquiry system
 │   ├── config.py                #   Configuration (env var overrides)
 │   ├── unifi_defense.py         #   AI-augmented UniFi defense engine
+│   ├── correlation.py           #   Cross-layer RF + network correlation engine
+│   ├── incident_timeline.py     #   Automated incident timeline generator
+│   ├── threat_intel.py          #   Threat feed integration (abuse.ch)
 │   ├── device_db.py             #   Device knowledge base (SQLite)
-│   ├── miner_monitor.py         #   AxeOS BitAxe miner fleet monitor
+│   ├── miner_monitor.py         #   AxeOS BitAxe miner fleet monitor + health scoring
 │   ├── blackboard.py            #   Blackboard MCP JSON-RPC client
 │   ├── blackboard_monitor.py    #   Message monitoring + auto-ACK
 │   ├── tools.py                 #   Tool registry + MCP service wrappers
 │   ├── voice.py                 #   TTS voice client
 │   ├── learning.py              #   Training example auto-generation
 │   ├── memory.py                #   Sliding window conversation memory
+│   ├── marauder.py              #   ESP32 Marauder RF monitor (serial)
 │   ├── Dockerfile               #   Agent container image
 │   └── __init__.py
 │
@@ -282,6 +326,38 @@ When set, all API requests require `Authorization: Bearer <key>` header. The PWA
 | `MARAUDER_ENABLED` | `false` | Enable ESP32 Marauder RF monitoring |
 | `MARAUDER_DEVICE` | `/dev/ttyACM0` | Marauder serial device (Flipper Zero USB-UART) |
 
+### Cross-Layer Correlation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WOPR_CORRELATION_ENABLED` | `true` | Enable RF + network event correlation |
+| `WOPR_CORRELATION_WINDOW` | `120` | Correlation window in seconds |
+| `WOPR_CORRELATION_BUFFER` | `500` | Max events per ring buffer (RF / network) |
+
+### Incident Timelines
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WOPR_TIMELINE_ENABLED` | `true` | Enable automatic incident timelines on HIGH+ events |
+| `WOPR_TIMELINE_LOOKBACK` | `300` | Context lookback window in seconds (5 min) |
+| `WOPR_TIMELINE_DEDUP` | `600` | Per-(MAC, type) dedup window in seconds (10 min) |
+
+### Threat Intelligence
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WOPR_THREAT_INTEL_ENABLED` | `true` | Enable abuse.ch feed integration |
+| `WOPR_THREAT_INTEL_PULL` | `86400` | Feed refresh interval in seconds (24h) |
+| `WOPR_THREAT_INTEL_CHECK` | `10` | Cross-reference clients every Nth defense cycle |
+
+### Miner Fleet Automation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WOPR_MINER_OFFLINE_RESTART` | `5` | Consecutive poll failures before auto-restart |
+| `WOPR_MINER_OFFLINE_AUTO_RESTART` | `true` | Enable automatic restart of offline miners |
+| `WOPR_MINER_HR_DROP_POLLS` | `3` | Consecutive low-hashrate polls before alert |
+
 ---
 
 ## Model
@@ -358,24 +434,32 @@ systemctl --user enable --now local-joshua
 
 ```
 UniFi MCP Poll (30s) → Threat Summary → Client Baseline → Anomaly Detection
-                                                               │
-                          ┌────────────────────────────────────┘
+         │                                                        │
+         │    ┌───────────────────────────────┐                   │
+         └───►│ Threat Intel Cross-Reference  │───────────────────┤
+              │ (abuse.ch: C2 IPs + domains)  │                   │
+              └───────────────────────────────┘                   │
+                          ┌───────────────────────────────────────┘
                           ▼
                    Threat Classification
+                          │
+                          ├──► Correlation Engine (RF + Network)
+                          │         Evil Twin / Deauth→Reconnect / Coordinated
                           │
           ┌───────────────┼───────────────┐
           ▼               ▼               ▼
        CRITICAL        HIGH/MED        LOW/INFO
     Auto-Block +    Blackboard +      Log Only
     Voice Alert     Finding Post
+    + Timeline      + Timeline
 ```
 
 ### Severity Levels
 
 | Severity | Anomaly Types | Response |
 |----------|---------------|----------|
-| CRITICAL | Rogue AP, unauthorized device on secure VLAN | Auto-block + voice + Blackboard finding |
-| HIGH | Unknown OUI, population spike, auth failure burst, IPS alert | Blackboard finding + voice alert |
+| CRITICAL | Rogue AP, unauthorized device on secure VLAN, evil twin detected, coordinated attack, threat intel match | Auto-block + voice + Blackboard finding + incident timeline |
+| HIGH | Unknown OUI, population spike, auth failure burst, IPS alert, deauth→reconnect, probe→associate | Blackboard finding + voice alert + incident timeline |
 | MEDIUM | New device (known OUI), unusual DPI pattern, miner temp warning | Blackboard finding |
 | LOW | Device network change, miner share anomaly | Blackboard finding |
 | INFO | Baseline learning, routine events | Log only |
