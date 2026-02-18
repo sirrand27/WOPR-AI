@@ -847,14 +847,18 @@ class InboxHandler:
                                            "miner wifi", "miner connection"]):
             return (mm.get_connectivity_suggestions(), True)
 
-        # Restart miner
-        if "restart miner" in query_lower or "restart bitaxe" in query_lower:
+        # Restart miner — matches: "restart miner X", "restart bitaxe X",
+        # "restart rawi_bitaxe2", "restart X", "reboot X"
+        if re.search(r'\brestart\b|\breboot\b', query_lower):
+            # Extract identifier: try MAC first, then hostname after "restart"/"reboot"
             mac_match = re.search(r'([0-9a-f]{2}[:-]){5}[0-9a-f]{2}', query_lower)
             if mac_match:
                 identifier = mac_match.group(0)
             else:
-                parts = query_lower.split("restart")
-                identifier = parts[-1].strip().split()[0] if len(parts) > 1 else ""
+                # Strip the verb and optional "miner"/"bitaxe" prefix
+                rest = re.sub(r'^.*?\b(?:restart|reboot)\b\s*', '', query_lower).strip()
+                rest = re.sub(r'^(?:miner|bitaxe|nerdminer)\s+', '', rest).strip()
+                identifier = rest.split()[0] if rest else ""
 
             if identifier:
                 detail = mm.get_miner_detail(identifier)
