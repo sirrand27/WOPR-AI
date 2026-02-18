@@ -4,13 +4,14 @@ SQLite DAL with WAL mode for concurrent agent access.
 """
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-DB_PATH = Path(__file__).parent / "blackboard.db"
+DB_PATH = Path(os.environ.get("BLACKBOARD_DB_PATH", Path(__file__).parent / "blackboard.db"))
 _lock = threading.Lock()
 
 SCHEMA_SQL = """
