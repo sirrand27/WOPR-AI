@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blackboard-v29';
+const CACHE_NAME = 'blackboard-v30';
 const SHELL_URLS = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
