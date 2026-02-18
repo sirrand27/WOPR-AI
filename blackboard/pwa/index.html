@@ -171,7 +171,7 @@
       min-height: 0;
     }
 
-    .task-pane {
+    .defense-pane {
       flex: 0 0 50%;
       border-right: 1px solid var(--border);
     }
@@ -236,47 +236,87 @@
       border-right: 1px solid var(--fg-dim);
     }
 
-    /* ── Task Board ────────────────────────────── */
-    .task-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
+    /* ── Network Defense Pane ─────────────────── */
+    .defcon-display {
+      text-align: center;
+      padding: 10px 8px 6px;
+      border-bottom: 1px solid var(--border);
     }
+    .defcon-label {
+      font-size: 11px;
+      color: var(--fg-dim);
+      letter-spacing: 2px;
+    }
+    .defcon-level {
+      display: block;
+      font-size: 48px;
+      font-weight: bold;
+      line-height: 1;
+      margin: 2px 0;
+    }
+    .defcon-desc {
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+    .defcon-5 .defcon-level { color: var(--fg); }
+    .defcon-5 .defcon-desc { color: var(--fg-dim); }
+    .defcon-4 .defcon-level { color: var(--accent); }
+    .defcon-4 .defcon-desc { color: var(--accent); }
+    .defcon-3 .defcon-level { color: var(--medium); }
+    .defcon-3 .defcon-desc { color: var(--medium); }
+    .defcon-2 .defcon-level { color: var(--high); }
+    .defcon-2 .defcon-desc { color: var(--high); }
+    .defcon-1 .defcon-level { color: var(--critical); }
+    .defcon-1 .defcon-desc { color: var(--critical); }
+    @keyframes defcon-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .defcon-1 .defcon-level,
+    .defcon-2 .defcon-level { animation: defcon-pulse 2s ease-in-out infinite; }
 
-    .task-table th {
-      background: var(--header-bg);
+    .defense-section {
+      border-bottom: 1px solid var(--border);
+      padding: 4px 0;
+    }
+    .defense-section-header {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 2px 8px;
+    }
+    .defense-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      padding: 0 8px 4px;
+    }
+    .defense-stat { padding: 2px 0; }
+    .defense-stat-label {
+      color: var(--fg-dim);
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      display: block;
+    }
+    .defense-stat-value {
       color: var(--fg-bright);
-      text-align: left;
-      padding: 3px 6px;
-      font-size: 14px;
-      position: sticky;
-      top: 0;
-      z-index: 1;
+      font-size: 15px;
+      font-weight: bold;
     }
+    .defense-nominal { color: var(--fg-dim); font-size: 12px; padding: 4px 8px; display: block; }
 
-    .task-table td {
-      padding: 3px 6px;
-      border-bottom: 1px solid #111;
-      vertical-align: top;
+    .threat-list { padding: 0 8px 4px; max-height: 120px; overflow-y: auto; }
+    .threat-item {
+      font-size: 12px;
+      padding: 2px 0 2px 6px;
+      border-left: 3px solid var(--critical);
+      margin-bottom: 3px;
     }
-
-    .task-table tr:nth-child(even) {
-      background: #0d0d0d;
-    }
-
-    .sts-in_progress { color: var(--accent); }
-    .sts-complete { color: var(--fg); }
-    .sts-pending { color: var(--fg-dim); }
-    .sts-blocked { color: var(--critical); }
-    .sts-failed { color: var(--critical); }
-    .sts-claimed { color: var(--medium); }
-
-    .task-title {
-      max-width: 300px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+    .threat-item.posture-ALERT { border-left-color: var(--medium); }
+    .threat-item.posture-ISOLATE { border-left-color: var(--high); }
+    .threat-item.posture-BLOCK { border-left-color: var(--critical); }
+    .threat-mac { color: var(--fg-bright); font-size: 11px; }
+    .threat-host { color: var(--fg); }
+    .threat-posture { font-weight: bold; }
+    .threat-pending { color: var(--medium); font-size: 10px; }
 
     /* ── Agent Comms ───────────────────────────── */
     .message {
@@ -502,21 +542,90 @@
     <!-- Top Row: Task Board | Agent Comms -->
     <div class="top-row" id="topRow">
 
-      <!-- Task Board -->
-      <div class="pane task-pane" id="taskPane">
-        <div class="section-header">[ TASK BOARD ]</div>
-        <div class="pane-content" id="taskScroll">
-          <table class="task-table">
-            <thead>
-              <tr>
-                <th>STS</th>
-                <th>AGENT</th>
-                <th>PHASE</th>
-                <th>TASK</th>
-              </tr>
-            </thead>
-            <tbody id="taskBody"></tbody>
-          </table>
+      <!-- Network Defense -->
+      <div class="pane defense-pane" id="defensePane">
+        <div class="section-header">[ NETWORK DEFENSE ]</div>
+        <div class="pane-content" id="defenseScroll">
+
+          <div class="defcon-display defcon-5" id="defconDisplay">
+            <span class="defcon-label">DEFCON</span>
+            <span class="defcon-level" id="defconLevel">5</span>
+            <span class="defcon-desc" id="defconDesc">PEACEFUL</span>
+          </div>
+
+          <div class="defense-section">
+            <div class="defense-section-header">PERIMETER STATUS</div>
+            <div class="defense-grid">
+              <div class="defense-stat">
+                <span class="defense-stat-label">CLIENTS</span>
+                <span class="defense-stat-value" id="dClients">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">OUI PREFIX</span>
+                <span class="defense-stat-value" id="dOuis">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">BASELINE</span>
+                <span class="defense-stat-value" id="dBaseline">LEARNING</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">POLL #</span>
+                <span class="defense-stat-value" id="dPollCount">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="defense-section">
+            <div class="defense-section-header">ACTIVE THREATS</div>
+            <div id="threatList" class="threat-list">
+              <span class="defense-nominal">NO ACTIVE THREATS</span>
+            </div>
+          </div>
+
+          <div class="defense-section">
+            <div class="defense-section-header">RF MONITOR</div>
+            <div class="defense-grid">
+              <div class="defense-stat">
+                <span class="defense-stat-label">STATUS</span>
+                <span class="defense-stat-value" id="rfStatus">OFFLINE</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">MODE</span>
+                <span class="defense-stat-value" id="rfMode">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">APs TRACKED</span>
+                <span class="defense-stat-value" id="rfAPs">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">DEAUTH EVENTS</span>
+                <span class="defense-stat-value" id="rfDeauth">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="defense-section">
+            <div class="defense-section-header">MINING FLEET</div>
+            <div class="defense-grid">
+              <div class="defense-stat">
+                <span class="defense-stat-label">ONLINE</span>
+                <span class="defense-stat-value" id="mOnline">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">HASHRATE</span>
+                <span class="defense-stat-value" id="mHashrate">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">AVG TEMP</span>
+                <span class="defense-stat-value" id="mTemp">--</span>
+              </div>
+              <div class="defense-stat">
+                <span class="defense-stat-label">THROTTLED</span>
+                <span class="defense-stat-value" id="mThrottled">0</span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -871,18 +980,17 @@ function renderMission(mission) {
 function renderStats(stats) {
   if (!stats) return;
   const bar = document.getElementById('statsBar');
-  const tc = stats.task_counts || {};
-  const total = Object.values(tc).reduce((a, b) => a + b, 0);
-  const complete = tc.complete || 0;
+  const fc = stats.finding_counts || {};
+  const totalFindings = Object.values(fc).reduce((a, b) => a + b, 0);
   const now = new Date();
   const cst = new Date(now.getTime() - 6 * 60 * 60 * 1000);
   const timeStr = cst.toISOString().split('T')[1].substring(0, 8);
 
   bar.innerHTML =
-    `<span class="stat-item">TASKS: <span class="stat-value">${complete}/${total}</span></span>` +
+    `<span class="stat-item">FINDINGS: <span class="stat-value">${totalFindings}</span></span>` +
     `<span class="stat-item">HOSTS: <span class="stat-value">${stats.host_count || 0}</span></span>` +
     `<span class="stat-item">TRAINING: <span class="stat-value">${stats.training_examples_count || 0}</span></span>` +
-    `<span class="stat-item">UPDATED: <span class="stat-value">${timeStr}</span></span>`;
+    `<span class="stat-item">CLOCK: <span class="stat-value">${timeStr} CST</span></span>`;
 }
 
 // ── Render: Heartbeats ─────────────────────────
@@ -922,37 +1030,85 @@ function renderHeartbeats(heartbeats) {
   }
 }
 
-// ── Render: Tasks ──────────────────────────────
-function renderTasks(tasks) {
-  if (!tasks) return;
-  const body = document.getElementById('taskBody');
+// ── Render: Network Defense Status ─────────────
+let defenseData = null;
 
-  const statusIcons = {
-    pending: '[ ]', claimed: '[~]', in_progress: '[>]',
-    blocked: '[!]', complete: '[+]', failed: '[X]'
-  };
+async function pollDefenseStatus() {
+  try {
+    const resp = await fetch('/api/defense-status');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    defenseData = data.wopr || data[Object.keys(data)[0]] || null;
+    if (defenseData) renderDefenseStatus(defenseData);
+  } catch (e) { /* silent */ }
+}
 
-  const statusOrder = {
-    in_progress: 1, claimed: 2, pending: 3, blocked: 4, complete: 5, failed: 6
-  };
+function renderDefenseStatus(d) {
+  // DEFCON
+  const defconDisplay = document.getElementById('defconDisplay');
+  const level = d.defcon || 5;
+  document.getElementById('defconLevel').textContent = level;
+  const defconDescs = { 1: 'MAXIMUM THREAT', 2: 'HIGH ALERT', 3: 'ELEVATED', 4: 'GUARDED', 5: 'PEACEFUL' };
+  document.getElementById('defconDesc').textContent = defconDescs[level] || 'UNKNOWN';
+  defconDisplay.className = 'defcon-display defcon-' + level;
 
-  tasks.sort((a, b) =>
-    (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9) ||
-    (a.created_at || '').localeCompare(b.created_at || '')
-  );
+  // Perimeter
+  const p = d.perimeter || {};
+  document.getElementById('dClients').textContent = p.total_clients ?? '--';
+  document.getElementById('dOuis').textContent = p.known_ouis ?? '--';
+  const blEl = document.getElementById('dBaseline');
+  blEl.textContent = p.baseline_ready ? 'READY' : 'LEARNING';
+  blEl.style.color = p.baseline_ready ? 'var(--fg)' : 'var(--medium)';
+  document.getElementById('dPollCount').textContent = p.poll_count ?? '--';
 
-  body.innerHTML = tasks.map(t => {
-    const icon = statusIcons[t.status] || t.status;
-    const agent = t.assigned_to || '--';
-    const title = (t.title || '').substring(0, 60);
-    const stsClass = 'sts-' + (t.status || 'pending');
-    return `<tr>
-      <td class="${stsClass}">${escapeHtml(icon)}</td>
-      <td>${escapeHtml(agent)}</td>
-      <td>${escapeHtml(t.phase || '')}</td>
-      <td class="task-title" title="${escapeHtml(t.title || '')}">${escapeHtml(title)}</td>
-    </tr>`;
-  }).join('');
+  // Active Threats
+  const threatList = document.getElementById('threatList');
+  const threats = d.threats || [];
+  if (threats.length === 0) {
+    threatList.innerHTML = '<span class="defense-nominal">NO ACTIVE THREATS</span>';
+  } else {
+    threatList.innerHTML = threats.map(t => {
+      const pendingTag = t.pending_action ? ' <span class="threat-pending">[PENDING]</span>' : '';
+      return `<div class="threat-item posture-${escapeHtml(t.posture || '')}">
+        <span class="threat-posture">${escapeHtml(t.posture || '?')}</span>
+        <span class="threat-host">${escapeHtml(t.hostname || 'unknown')}</span>
+        <span class="threat-mac">(${escapeHtml(t.mac || '?')})</span>
+        x${t.detections || 0}${pendingTag}
+      </div>`;
+    }).join('');
+  }
+
+  // RF Monitor
+  const rf = d.rf_monitor || {};
+  const rfAvail = rf.available;
+  const rfEl = document.getElementById('rfStatus');
+  rfEl.textContent = rfAvail ? 'ACTIVE' : 'OFFLINE';
+  rfEl.style.color = rfAvail ? 'var(--fg)' : 'var(--fg-dim)';
+  document.getElementById('rfMode').textContent = rf.mode || '--';
+  document.getElementById('rfAPs').textContent = rf.known_rf_aps ?? '--';
+  document.getElementById('rfDeauth').textContent = rf.deauth_events_total ?? '--';
+
+  // Mining Fleet
+  const m = d.miner_fleet || {};
+  if ('total_workers' in m) {
+    document.getElementById('mOnline').textContent = (m.pool_online || 0) + '/' + (m.total_workers || 0);
+    document.getElementById('mHashrate').textContent = formatHashrate(m.total_hashrate_1h || 0);
+  } else if ('total' in m) {
+    document.getElementById('mOnline').textContent = (m.online || 0) + '/' + (m.total || 0);
+    document.getElementById('mHashrate').textContent = formatHashrate(m.total_hashrate || 0);
+  }
+  document.getElementById('mTemp').textContent = m.avg_temp ? m.avg_temp.toFixed(1) + 'C' : '--';
+  const thrEl = document.getElementById('mThrottled');
+  thrEl.textContent = m.throttled || 0;
+  thrEl.style.color = (m.throttled || 0) > 0 ? 'var(--medium)' : 'var(--fg-bright)';
+}
+
+function formatHashrate(ghps) {
+  if (!ghps || ghps === 0) return '0 H/s';
+  if (ghps >= 1000) return (ghps / 1000).toFixed(2) + ' TH/s';
+  if (ghps >= 1) return ghps.toFixed(1) + ' GH/s';
+  if (ghps >= 0.001) return (ghps * 1000).toFixed(1) + ' MH/s';
+  return (ghps * 1e6).toFixed(0) + ' KH/s';
 }
 
 // ── Render: Messages ───────────────────────────
@@ -1236,7 +1392,6 @@ async function pollDashboard() {
     renderMission(data.mission);
     renderStats(data.stats);
     renderHeartbeats(data.heartbeats);
-    renderTasks(data.tasks);
     renderMessages(data.messages);
     renderFindings(data.findings);
 
@@ -1347,11 +1502,13 @@ document.getElementById('msgInput').addEventListener('keydown', (e) => {
 });
 
 // ── Visibility: pause polling when hidden ──────
-let dashInterval, actInterval;
+let dashInterval, actInterval, defenseInterval;
 
 function startPolling() {
   pollDashboard();
+  pollDefenseStatus();
   dashInterval = setInterval(pollDashboard, 5000);
+  defenseInterval = setInterval(pollDefenseStatus, 5000);
   // Catch up on all history pages (no animation), THEN start live polling
   catchUpActivity().then(() => {
     actInterval = setInterval(pollActivity, 2000);
@@ -1360,6 +1517,7 @@ function startPolling() {
 
 function stopPolling() {
   clearInterval(dashInterval);
+  clearInterval(defenseInterval);
   clearInterval(actInterval);
 }
 

@@ -476,6 +476,9 @@ class ThreatClassifier:
         "dpi_deviation": SEVERITY_MEDIUM,
         "ids_correlated": SEVERITY_HIGH,
         "rf_anomaly": SEVERITY_MEDIUM,
+        # ESP32 Marauder RF monitor types
+        "deauth_attack": SEVERITY_CRITICAL,
+        "unknown_ap": SEVERITY_INFO,
     }
 
     @classmethod
@@ -545,6 +548,15 @@ class ThreatClassifier:
         elif atype == "rf_anomaly":
             return (f"RF anomaly on {anomaly.get('frequency', '?')} MHz: "
                     f"{anomaly.get('signal_count', '?')} signals in burst")
+
+        elif atype == "deauth_attack":
+            return (f"Deauth attack detected via RF monitor: "
+                    f"source {anomaly.get('src', '??')} targeting {anomaly.get('dst', '??')} "
+                    f"— {anomaly.get('count', 0)} frames in {anomaly.get('window', 30)}s")
+
+        elif atype == "unknown_ap":
+            return (f"Unknown AP via RF scan: {anomaly.get('ssid', 'hidden')} "
+                    f"({anomaly.get('bssid', '??')}) Ch:{anomaly.get('channel', '?')}")
 
         return f"Anomaly detected: {json.dumps(anomaly)}"
 
@@ -1024,6 +1036,16 @@ class UniFiDefenseLoop:
                 self.flipper_monitor = FlipperMonitor(blackboard, voice)
         except Exception as e:
             logger.debug(f"FlipperMonitor not enabled: {e}")
+        # ESP32 Marauder RF monitor (via Flipper Zero USB-UART bridge)
+        self.marauder = None
+        try:
+            from config import MARAUDER_ENABLED
+            if MARAUDER_ENABLED:
+                from marauder import MarauderMonitor
+                self.marauder = MarauderMonitor(blackboard, voice)
+                logger.info("MarauderMonitor enabled — RF layer defense active")
+        except Exception as e:
+            logger.debug(f"MarauderMonitor not enabled: {e}")
         self._thread = None
         self._running = False
         self._poll_count = 0
@@ -1047,6 +1069,11 @@ class UniFiDefenseLoop:
     def stop(self):
         """Stop the defense loop."""
         self._running = False
+        if self.marauder:
+            try:
+                self.marauder.stop()
+            except Exception:
+                pass
         if self._thread:
             self._thread.join(timeout=5)
         logger.info("UniFi Network Defense loop stopped")
@@ -1231,10 +1258,111 @@ class UniFiDefenseLoop:
             for anomaly in anomalies:
                 self._handle_anomaly(anomaly)
 
+        # 8b. ESP32 Marauder RF monitoring (if enabled)
+        if self.marauder:
+            try:
+                from config import KNOWN_SSIDS
+                rf_anomalies = self.marauder.poll(
+                    self._poll_count, self._managed_infrastructure, KNOWN_SSIDS)
+                for anomaly in rf_anomalies:
+                    self._handle_anomaly(anomaly)
+            except Exception as e:
+                logger.error(f"Marauder poll error: {e}")
+                self.diagnostics.record_tool_error("marauder", e)
+
         # 9. Record cycle timing + run diagnostics check
         _cycle_ms = int((time.time() - _cycle_start) * 1000)
         self.diagnostics.record_poll_cycle(_cycle_ms)
         self.diagnostics.periodic_check()
+
+        # 10. Post structured defense status to Blackboard (every 5th cycle = ~2.5 min)
+        if self._poll_count % 5 == 0:
+            self._post_defense_status()
+
+    def _post_defense_status(self):
+        """Build and post structured defense status to Blackboard for PWA consumption."""
+        try:
+            summary = self.baseline.get_summary()
+            diag = self.diagnostics.get_health_summary()
+
+            # Active threats from posture tracker
+            active_threats = []
+            if hasattr(self.posture, '_device_postures'):
+                for mac, posture_info in self.posture._device_postures.items():
+                    level = posture_info.get("level", POSTURE_OBSERVE)
+                    if level in (POSTURE_ALERT, POSTURE_ISOLATE, POSTURE_BLOCK):
+                        client_info = self.baseline.known_clients.get(mac, {})
+                        active_threats.append({
+                            "mac": mac,
+                            "hostname": client_info.get("hostname", "unknown"),
+                            "posture": level,
+                            "detections": posture_info.get("detection_count", 0),
+                            "pending_action": posture_info.get("pending_approval", False),
+                        })
+
+            # DEFCON calculation
+            defcon = self._calculate_defcon(active_threats, diag)
+
+            # RF monitor status
+            rf_status = {"available": False, "mode": None, "known_rf_aps": 0,
+                         "deauth_events_total": 0, "probe_devices": 0, "last_scan": 0}
+            if self.marauder:
+                rf_status = self.marauder.get_status()
+            elif self.flipper_monitor:
+                rf_status = {
+                    "available": self.flipper_monitor._available or False,
+                    "mode": "flipper_mcp",
+                    "known_rf_aps": len(getattr(self.flipper_monitor, '_known_aps', {})),
+                    "deauth_events_total": 0,
+                    "probe_devices": 0,
+                    "last_scan": getattr(self.flipper_monitor, '_last_wifi_scan', 0),
+                }
+
+            # Miner fleet
+            miner_fleet = {}
+            if self.miner_monitor and getattr(self.miner_monitor, 'enabled', True):
+                try:
+                    miner_fleet = self.miner_monitor.get_fleet_summary()
+                except Exception:
+                    pass
+
+            status = {
+                "defcon": defcon,
+                "perimeter": {
+                    "total_clients": summary.get("total_known_clients", 0),
+                    "known_ouis": summary.get("known_ouis", 0),
+                    "baseline_ready": summary.get("baseline_ready", False),
+                    "learning_cycles": summary.get("learning_cycles", 0),
+                    "poll_count": self._poll_count,
+                },
+                "threats": active_threats,
+                "rf_monitor": rf_status,
+                "miner_fleet": miner_fleet,
+                "diagnostics": {
+                    "status": "DEGRADED" if diag.get("degraded_subsystems") else "NOMINAL",
+                    "degraded_subsystems": diag.get("degraded_subsystems", []),
+                    "ollama_avg_ms": int(diag.get("ollama_latency_avg_ms", 0)),
+                    "cycle_avg_ms": int(diag.get("cycle_avg_ms", 0)),
+                },
+                "recent_anomalies": list(self._recent_anomalies)[-5:],
+            }
+
+            self.blackboard.update_defense_status(status)
+
+        except Exception as e:
+            logger.error(f"Defense status post failed: {e}")
+
+    def _calculate_defcon(self, active_threats, diag):
+        """Calculate DEFCON level (5=peaceful, 1=maximum threat)."""
+        if any(t["posture"] == POSTURE_BLOCK for t in active_threats):
+            return 1
+        if any(t["posture"] == POSTURE_ISOLATE for t in active_threats):
+            return 2
+        if any(t["posture"] == POSTURE_ALERT for t in active_threats):
+            return 3
+        if diag.get("degraded_subsystems"):
+            return 4
+        return 5
 
     def _process_threat_summary(self, summary):
         """Process threat summary from UniFi MCP."""
@@ -1400,13 +1528,16 @@ class UniFiDefenseLoop:
         if suppressed_count > 0:
             description = f"{description} (repeated {suppressed_count + 1}x in {ANOMALY_SUPPRESSION_WINDOW // 60}m)"
 
-        logger.warning(f"[{severity}] {description}")
+        # RF source tag for Marauder-originated anomalies
+        rf_tag = "[RF] " if anomaly.get("source") == "marauder" else ""
+
+        logger.warning(f"{rf_tag}[{severity}] {description}")
 
         # Post to Live Activity window
         if severity in (SEVERITY_CRITICAL, SEVERITY_HIGH):
-            self._post_activity(f"[{severity}] {description}", entry_type="CRITICAL")
+            self._post_activity(f"{rf_tag}[{severity}] {description}", entry_type="CRITICAL")
         else:
-            self._post_activity(f"[{severity}] {description}")
+            self._post_activity(f"{rf_tag}[{severity}] {description}")
 
         # Evaluate through graduated response posture
         if mac:

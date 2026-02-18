@@ -205,6 +205,15 @@ FLIPPER_MONITORING_ENABLED = os.environ.get("WOPR_FLIPPER_MONITORING", "false").
 FLIPPER_WIFI_SCAN_INTERVAL = 300   # seconds (5 min)
 FLIPPER_SUBGHZ_SCAN_INTERVAL = 600  # seconds (10 min)
 
+# === ESP32 Marauder (via Flipper Zero USB-UART Bridge) ===
+MARAUDER_ENABLED = os.environ.get("WOPR_MARAUDER_ENABLED", "false").lower() == "true"
+MARAUDER_DEVICE = os.environ.get("WOPR_MARAUDER_DEVICE", "/dev/ttyACM0")
+MARAUDER_BAUD = int(os.environ.get("WOPR_MARAUDER_BAUD", "115200"))
+MARAUDER_SCAN_INTERVAL = int(os.environ.get("WOPR_MARAUDER_SCAN_INTERVAL", "300"))  # AP scan every 5 min
+MARAUDER_SCAN_DWELL = int(os.environ.get("WOPR_MARAUDER_SCAN_DWELL", "15"))  # seconds to dwell on scanap
+MARAUDER_DEAUTH_BURST_THRESHOLD = int(os.environ.get("WOPR_MARAUDER_DEAUTH_BURST", "5"))  # frames in window
+MARAUDER_DEAUTH_BURST_WINDOW = int(os.environ.get("WOPR_MARAUDER_DEAUTH_WINDOW", "30"))  # seconds
+
 # === Anomaly Suppression ===
 ANOMALY_SUPPRESSION_WINDOW = int(os.environ.get("WOPR_ANOMALY_SUPPRESSION", "900"))  # 15 min default
 

@@ -110,6 +110,8 @@ services:
       - wopr-data:/data/wopr
       - logs:/data/logs
       - ./wopr:/app:ro
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0"
     environment:
       - WOPR_DEVICE_DB=${DEVICE_DB_PATH:-/data/wopr/wopr_devices.db}
       - WOPR_TRAINING_DIR=${TRAINING_DATA_DIR:-/data/wopr/training_data}
@@ -121,6 +123,8 @@ services:
       - JOSHUA_VOICE_HOST=voice
       - JOSHUA_VOICE_PORT=9876
       - FLIPPER_MCP_URL=${FLIPPER_MCP_URL:-}
+      - WOPR_MARAUDER_ENABLED=${MARAUDER_ENABLED:-false}
+      - WOPR_MARAUDER_DEVICE=${MARAUDER_DEVICE:-/dev/ttyACM0}
     depends_on:
       ollama:
         condition: service_healthy

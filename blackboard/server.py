@@ -313,6 +313,15 @@ def post_activity(agent_name: str, entry_type: str, content: str) -> str:
 
 
 @mcp.tool()
+def update_defense_status(agent_name: str, status_json: str) -> str:
+    """Update structured defense status for an agent (consumed by Mission Control dashboard).
+    status_json: JSON string containing DEFCON level, perimeter stats,
+    active threats, RF monitor state, miner fleet summary."""
+    result = db.update_defense_status(agent_name, status_json)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
 def get_activity(since_id: int = 0, limit: int = 100) -> str:
     """Get activity log entries since a given ID. Returns entries from all agents."""
     entries = db.get_activity(since_id, limit)
@@ -444,6 +453,21 @@ async def activity_api(request: Request) -> JSONResponse:
 
     data = "\n".join(lines) + ("\n" if lines else "")
     return JSONResponse({"data": data, "offset": max_id})
+
+
+@mcp.custom_route("/api/defense-status", methods=["GET"])
+async def defense_status_api(request: Request) -> JSONResponse:
+    """Return latest defense status for all agents (consumed by Network Defense pane)."""
+    statuses = db.get_defense_status()
+    result = {}
+    for s in statuses:
+        agent = s.get("agent", "unknown")
+        try:
+            result[agent] = json.loads(s.get("status_json", "{}"))
+            result[agent]["_updated_at"] = s.get("updated_at", "")
+        except json.JSONDecodeError:
+            result[agent] = {"error": "invalid JSON", "_updated_at": s.get("updated_at", "")}
+    return JSONResponse(result)
 
 
 @mcp.custom_route("/api/inbox", methods=["GET"])

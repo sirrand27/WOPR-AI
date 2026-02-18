@@ -19,6 +19,7 @@ COPY learning.py /app/learning.py
 COPY memory.py /app/memory.py
 COPY blackboard.py /app/blackboard.py
 COPY blackboard_monitor.py /app/blackboard_monitor.py
+COPY marauder.py /app/marauder.py
 COPY __init__.py /app/__init__.py
 
 CMD ["python", "agent.py"]

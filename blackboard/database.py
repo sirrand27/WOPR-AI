@@ -124,6 +124,12 @@ CREATE TABLE IF NOT EXISTS activity_log (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS defense_status (
+    agent TEXT PRIMARY KEY,
+    status_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_agent, created_at);
@@ -557,6 +563,38 @@ def get_activity(since_id: int = 0, limit: int = 200) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM activity_log WHERE id > ? ORDER BY id LIMIT ?",
         (since_id, limit)
+    ).fetchall()
+    conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
+# ── Defense Status ───────────────────────────────────────
+
+def update_defense_status(agent: str, status_json: str) -> dict:
+    """Upsert structured defense status for an agent."""
+    with _lock:
+        conn = get_connection()
+        now = _now()
+        conn.execute(
+            "INSERT INTO defense_status (agent, status_json, updated_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(agent) DO UPDATE SET status_json=excluded.status_json, "
+            "updated_at=excluded.updated_at",
+            (agent, status_json, now)
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM defense_status WHERE agent=?", (agent,)
+        ).fetchone()
+        conn.close()
+    return _row_to_dict(row)
+
+
+def get_defense_status() -> list[dict]:
+    """Get latest defense status for all agents."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM defense_status ORDER BY updated_at DESC"
     ).fetchall()
     conn.close()
     return [_row_to_dict(r) for r in rows]

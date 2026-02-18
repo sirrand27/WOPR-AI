@@ -169,6 +169,13 @@ class BlackboardClient:
             "entry_type": entry_type
         })
 
+    def update_defense_status(self, status_dict):
+        """Post structured defense status to Blackboard for Mission Control dashboard."""
+        return self._mcp_call("update_defense_status", {
+            "agent_name": AGENT_NAME,
+            "status_json": json.dumps(status_dict, default=str)
+        })
+
     def get_status(self):
         """Get mission status."""
         return self._mcp_call("get_status", {})
