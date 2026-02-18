@@ -797,7 +797,6 @@ function typeLine(container, htmlPrefix, text, cssClass, scrollTarget, onDone) {
   const escaped = escapeHtml(text);
   const chars = [...escaped];
 
-  // WarGames movie timing: ~60ms median per char, ~350ms on spaces/word breaks
   function tick() {
     if (i < chars.length) {
       span.innerHTML += chars[i];
@@ -805,16 +804,16 @@ function typeLine(container, htmlPrefix, text, cssClass, scrollTarget, onDone) {
       playTick();
       if (scrollTarget) autoScroll(scrollTarget);
       const ch = chars[i - 1];
-      const jitter = Math.random() * 30 - 15;
+      const jitter = Math.random() * 10 - 5;
       let delay;
       if (ch === ' ') {
-        delay = 120 + jitter; // word break pause
+        delay = 35 + jitter;
       } else if (ch === '\n') {
-        delay = 300;          // line break
+        delay = 80;
       } else {
-        delay = 60 + jitter;  // character: ~60ms median
+        delay = 18 + jitter;
       }
-      setTimeout(tick, Math.max(20, delay));
+      setTimeout(tick, Math.max(8, delay));
     } else {
       cursor.remove();
       if (scrollTarget) autoScroll(scrollTarget);
