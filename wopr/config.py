@@ -223,6 +223,12 @@ MARAUDER_PWNAGOTCHI_DWELL = int(os.environ.get("WOPR_MARAUDER_PWNA_DWELL", "20")
 MARAUDER_DEAUTH_BURST_THRESHOLD = int(os.environ.get("WOPR_MARAUDER_DEAUTH_BURST", "5"))  # frames in window
 MARAUDER_DEAUTH_BURST_WINDOW = int(os.environ.get("WOPR_MARAUDER_DEAUTH_WINDOW", "30"))  # seconds
 
+# === Firmware OTA ===
+FIRMWARE_DIR = os.environ.get("WOPR_FIRMWARE_DIR", "/data/wopr/firmware")
+# Board version → firmware binary mapping (auto-detected from /api/system/info)
+# Populate by placing .bin files in FIRMWARE_DIR named: esp-miner-<boardVersion>.bin
+# e.g. esp-miner-401.bin, esp-miner-403.bin, esp-miner-601.bin
+
 # === Cross-Layer Correlation ===
 CORRELATION_ENABLED = os.environ.get("WOPR_CORRELATION_ENABLED", "true").lower() == "true"
 CORRELATION_WINDOW = int(os.environ.get("WOPR_CORRELATION_WINDOW", "120"))  # seconds

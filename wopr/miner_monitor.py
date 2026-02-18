@@ -23,7 +23,7 @@ from config import (
     PUBLIC_POOL_POLL_INTERVAL, MINER_STALE_SHARE_THRESHOLD,
     MINER_STALE_SHARE_POLLS,
     MINER_OFFLINE_RESTART_THRESHOLD, MINER_OFFLINE_AUTO_RESTART,
-    MINER_HASHRATE_DROP_POLLS,
+    MINER_HASHRATE_DROP_POLLS, FIRMWARE_DIR,
 )
 
 logger = logging.getLogger(__name__)
@@ -719,6 +719,292 @@ class MinerMonitor:
             logger.error(f"[MINER] Offline restart failed for {name} at {ip}: {e}")
             return False
 
+    # ── Firmware OTA ────────────────────────────────────────────────
+
+    def firmware_update(self, ip, mac, firmware_path=None):
+        """Flash AxeOS firmware via OTA. Auto-detects board version if no
+        firmware_path is given and selects from FIRMWARE_DIR.
+
+        Returns (success: bool, message: str)."""
+        import os
+        name = self._mac_to_name.get(mac, mac)
+
+        # 1. Query the miner for board version and current firmware
+        try:
+            url = f"http://{ip}/api/system/info"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=_AXEOS_TIMEOUT) as resp:
+                info = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            return (False, f"Cannot reach {name} at {ip}: {e}")
+
+        board_version = str(info.get("boardVersion", "unknown"))
+        current_version = info.get("version", "unknown")
+        asic_model = info.get("ASICModel", "unknown")
+
+        logger.info(
+            f"[OTA] {name}: board={board_version}, ASIC={asic_model}, "
+            f"firmware={current_version}"
+        )
+
+        # 2. Resolve firmware binary
+        if not firmware_path:
+            firmware_path = self._resolve_firmware(board_version)
+            if not firmware_path:
+                return (False,
+                    f"No firmware binary for board version {board_version}. "
+                    f"Place esp-miner-{board_version}.bin in {FIRMWARE_DIR}")
+
+        if not os.path.isfile(firmware_path):
+            return (False, f"Firmware file not found: {firmware_path}")
+
+        file_size = os.path.getsize(firmware_path)
+        if file_size < 10000 or file_size > 10_000_000:
+            return (False, f"Firmware file size suspect: {file_size} bytes")
+
+        # 3. Read binary
+        with open(firmware_path, "rb") as f:
+            firmware_data = f.read()
+
+        # 4. Flash via OTA endpoint
+        logger.warning(
+            f"[OTA] FLASHING {name} ({mac}) at {ip} — "
+            f"board={board_version}, file={os.path.basename(firmware_path)} "
+            f"({len(firmware_data)} bytes)"
+        )
+
+        try:
+            req = urllib.request.Request(
+                f"http://{ip}/api/system/OTA",
+                data=firmware_data,
+                method="POST",
+            )
+            req.add_header("Content-Type", "application/octet-stream")
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                result = resp.read().decode("utf-8", errors="replace")
+                status_code = resp.status
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")[:200]
+            return (False, f"OTA flash failed — HTTP {e.code}: {body}")
+        except Exception as e:
+            return (False, f"OTA flash failed: {e}")
+
+        if status_code != 200:
+            return (False, f"OTA flash returned HTTP {status_code}: {result[:200]}")
+
+        # 5. Log success
+        msg = (
+            f"FIRMWARE UPDATE: {name} ({mac}) at {ip} — "
+            f"board {board_version}, {os.path.basename(firmware_path)}, "
+            f"was {current_version}. Miner will reboot."
+        )
+        logger.warning(f"[OTA] {msg}")
+
+        self.voice.speak(
+            f"Firmware update complete for {name}. "
+            f"Board version {board_version}. Miner is rebooting."
+        )
+
+        cst_stamp = datetime.now(ZoneInfo("America/Chicago")).strftime(
+            "%Y-%m-%d %H:%M:%S CST"
+        )
+        self.blackboard.post_activity(
+            f"[{cst_stamp}] [OTA] {msg}", entry_type="OK"
+        )
+        self.blackboard.post_finding(
+            title=f"Firmware Update: {name}",
+            severity="INFO",
+            description=msg,
+            host=ip,
+        )
+
+        return (True, msg)
+
+    def _resolve_firmware(self, board_version):
+        """Find the firmware binary for a given board version."""
+        import os
+        if not os.path.isdir(FIRMWARE_DIR):
+            return None
+
+        # Try exact match first: esp-miner-401.bin
+        exact = os.path.join(FIRMWARE_DIR, f"esp-miner-{board_version}.bin")
+        if os.path.isfile(exact):
+            return exact
+
+        # Try with version suffix: esp-miner-401-v2.12.2.bin (pick latest)
+        candidates = []
+        for f in os.listdir(FIRMWARE_DIR):
+            if f.startswith(f"esp-miner-{board_version}") and f.endswith(".bin"):
+                candidates.append(os.path.join(FIRMWARE_DIR, f))
+
+        if candidates:
+            # Sort by modification time, newest first
+            candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            return candidates[0]
+
+        return None
+
+    def list_firmware(self):
+        """List available firmware binaries and their board versions."""
+        import os
+        if not os.path.isdir(FIRMWARE_DIR):
+            return {}
+
+        result = {}
+        for f in sorted(os.listdir(FIRMWARE_DIR)):
+            if f.endswith(".bin"):
+                path = os.path.join(FIRMWARE_DIR, f)
+                size = os.path.getsize(path)
+                result[f] = {
+                    "path": path,
+                    "size_bytes": size,
+                    "size_mb": round(size / 1_048_576, 2),
+                }
+        return result
+
+    def get_fleet_firmware(self):
+        """Get current firmware versions for all AxeOS miners."""
+        versions = {}
+        for mac in MINER_AXEOS_MACS:
+            mac = mac.lower()
+            ip = self._mac_to_ip.get(mac)
+            if not ip:
+                continue
+            try:
+                url = f"http://{ip}/api/system/info"
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=_AXEOS_TIMEOUT) as resp:
+                    info = json.loads(resp.read().decode("utf-8"))
+                versions[mac] = {
+                    "hostname": info.get("hostname", mac),
+                    "ip": ip,
+                    "version": info.get("version", "unknown"),
+                    "boardVersion": str(info.get("boardVersion", "unknown")),
+                    "ASICModel": info.get("ASICModel", "unknown"),
+                    "idfVersion": info.get("idfVersion", "unknown"),
+                    "runningPartition": info.get("runningPartition", "unknown"),
+                }
+            except Exception:
+                versions[mac] = {
+                    "hostname": self._mac_to_name.get(mac, mac),
+                    "ip": ip,
+                    "version": "unreachable",
+                }
+        return versions
+
+    # ── Clock Setting Safeguards ─────────────────────────────────
+
+    # Safe operating limits per ASIC model.
+    # frequency: (min_mhz, max_mhz), coreVoltage: (min_mv, max_mv)
+    _ASIC_LIMITS = {
+        "BM1366": {"freq": (50, 600),  "voltage": (1000, 1250)},
+        "BM1368": {"freq": (50, 600),  "voltage": (1000, 1250)},
+        "BM1370": {"freq": (50, 625),  "voltage": (1000, 1300)},
+        "BM1397": {"freq": (50, 500),  "voltage": (1000, 1200)},
+    }
+    _DEFAULT_LIMITS = {"freq": (50, 575), "voltage": (1000, 1250)}
+
+    def validate_clock_settings(self, ip, mac, frequency=None, core_voltage=None):
+        """Validate frequency/voltage against safe ASIC limits.
+        Returns (valid: bool, message: str). Queries the miner for its
+        ASIC model to select the correct limits."""
+        name = self._mac_to_name.get(mac, mac)
+
+        # Get current info to determine ASIC model
+        try:
+            url = f"http://{ip}/api/system/info"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=_AXEOS_TIMEOUT) as resp:
+                info = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            return (False, f"Cannot reach {name} at {ip} to verify ASIC: {e}")
+
+        asic = info.get("ASICModel", "unknown")
+        limits = self._ASIC_LIMITS.get(asic, self._DEFAULT_LIMITS)
+        min_freq, max_freq = limits["freq"]
+        min_volt, max_volt = limits["voltage"]
+
+        errors = []
+        if frequency is not None:
+            if not isinstance(frequency, (int, float)) or frequency <= 0:
+                errors.append(f"Invalid frequency value: {frequency}")
+            elif frequency < min_freq:
+                errors.append(
+                    f"Frequency {frequency} MHz below minimum {min_freq} MHz "
+                    f"for {asic}")
+            elif frequency > max_freq:
+                errors.append(
+                    f"Frequency {frequency} MHz exceeds safe maximum {max_freq} MHz "
+                    f"for {asic}")
+
+        if core_voltage is not None:
+            if not isinstance(core_voltage, (int, float)) or core_voltage <= 0:
+                errors.append(f"Invalid voltage value: {core_voltage}")
+            elif core_voltage < min_volt:
+                errors.append(
+                    f"Core voltage {core_voltage} mV below minimum {min_volt} mV "
+                    f"for {asic}")
+            elif core_voltage > max_volt:
+                errors.append(
+                    f"Core voltage {core_voltage} mV exceeds safe maximum {max_volt} mV "
+                    f"for {asic}")
+
+        if errors:
+            msg = f"SAFETY CHECK FAILED for {name} ({asic}): {'; '.join(errors)}"
+            logger.warning(f"[MINER] {msg}")
+            return (False, msg)
+
+        return (True, f"Settings valid for {asic}: "
+                f"freq={frequency} MHz, voltage={core_voltage} mV")
+
+    def safe_set_clock(self, ip, mac, frequency=None, core_voltage=None):
+        """Set miner clock frequency and/or core voltage with safety validation.
+        Returns (success: bool, message: str)."""
+        name = self._mac_to_name.get(mac, mac)
+
+        # Validate first
+        valid, msg = self.validate_clock_settings(ip, mac, frequency, core_voltage)
+        if not valid:
+            self.blackboard.post_finding(
+                title=f"Clock Setting Rejected: {name}",
+                severity="HIGH",
+                description=msg,
+                host=ip,
+            )
+            return (False, msg)
+
+        # Build PATCH payload with only the fields being changed
+        payload = {}
+        if frequency is not None:
+            payload["frequency"] = int(frequency)
+        if core_voltage is not None:
+            payload["coreVoltage"] = int(core_voltage)
+
+        if not payload:
+            return (False, "No settings to change.")
+
+        url = f"http://{ip}/api/system"
+        try:
+            req = urllib.request.Request(
+                url, data=json.dumps(payload).encode("utf-8"), method="PATCH")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=_AXEOS_TIMEOUT) as resp:
+                resp.read()
+        except Exception as e:
+            return (False, f"Failed to set clock on {name} at {ip}: {e}")
+
+        msg = f"Clock updated on {name} ({mac}): {payload}"
+        logger.info(f"[MINER] {msg}")
+
+        cst_stamp = datetime.now(ZoneInfo("America/Chicago")).strftime(
+            "%Y-%m-%d %H:%M:%S CST")
+        self.blackboard.post_activity(
+            f"[{cst_stamp}] [MINER] CLOCK SET: {name} ({mac}) — {payload}",
+            entry_type="OK",
+        )
+
+        return (True, msg)
+
     # ── Clock Throttle / Restore ──────────────────────────────────
 
     def _throttle_miner(self, ip, mac, current_freq, temp):
@@ -741,6 +1027,13 @@ class MinerMonitor:
             return False
 
         reduced_freq = int(current_freq * (1 - MINER_THROTTLE_REDUCTION))
+
+        # Safety check — ensure reduced frequency is within ASIC limits
+        valid, vmsg = self.validate_clock_settings(ip, mac, frequency=reduced_freq)
+        if not valid:
+            logger.warning(f"[MINER] Throttle blocked by safety check: {vmsg}")
+            return False
+
         url = f"http://{ip}/api/system"
         payload = json.dumps({"frequency": reduced_freq}).encode("utf-8")
 

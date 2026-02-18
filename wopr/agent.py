@@ -872,6 +872,106 @@ class InboxHandler:
                 return (f"Miner '{identifier}' not found in fleet.", True)
             return ("Specify miner to restart. Example: restart miner rawi_bitaxe1", True)
 
+        # Firmware update
+        if re.search(r'\b(?:firmware|flash|ota)\b.*\b(?:update|upgrade|flash)\b'
+                      r'|\b(?:update|upgrade|flash)\b.*\b(?:firmware|ota)\b', query_lower):
+            # "firmware update <miner>", "flash firmware <miner>", "ota update <miner>"
+            mac_match = re.search(r'([0-9a-f]{2}[:-]){5}[0-9a-f]{2}', query_lower)
+            if mac_match:
+                identifier = mac_match.group(0)
+            else:
+                rest = re.sub(
+                    r'\b(?:firmware|flash|ota|update|upgrade|miner|bitaxe|all)\b', '', query_lower
+                ).strip()
+                identifier = rest.split()[0] if rest.split() else ""
+
+            if not identifier:
+                # "firmware update all" — fleet-wide
+                if "all" in query_lower or "fleet" in query_lower:
+                    versions = mm.get_fleet_firmware()
+                    lines = ["FLEET FIRMWARE STATUS."]
+                    for mac, info in sorted(versions.items(), key=lambda x: x[1].get("hostname", "")):
+                        lines.append(
+                            f"  {info.get('hostname', mac):25s} board={info.get('boardVersion', '?')} "
+                            f"v={info.get('version', '?')} ASIC={info.get('ASICModel', '?')}")
+                    available = mm.list_firmware()
+                    if available:
+                        lines.append(f"AVAILABLE BINARIES: {', '.join(available.keys())}")
+                    else:
+                        lines.append(f"NO FIRMWARE BINARIES in {mm.list_firmware.__self__.__class__.__name__} dir. "
+                                     f"Place esp-miner-<boardVersion>.bin files to enable OTA.")
+                    lines.append("Specify target: firmware update <hostname>. W.O.P.R. out.")
+                    return ("\n".join(lines), False)
+                return ("Specify target. Example: firmware update rawi_bitaxe1, "
+                        "or firmware update all for fleet status. W.O.P.R. out.", True)
+
+            detail = mm.get_miner_detail(identifier)
+            if not detail or not detail.get("ip"):
+                return (f"Miner '{identifier}' not found in fleet. W.O.P.R. out.", True)
+
+            ip = detail["ip"]
+            mac = detail["mac"]
+            success, msg = mm.firmware_update(ip, mac)
+            if success:
+                return (f"OTA COMPLETE. {msg} W.O.P.R. out.", True)
+            return (f"OTA FAILED. {msg} W.O.P.R. out.", True)
+
+        # Firmware status / list
+        if re.search(r'\bfirmware\b.*\b(?:status|version|list|check)\b'
+                      r'|\b(?:version|check)\b.*\bfirmware\b', query_lower):
+            versions = mm.get_fleet_firmware()
+            lines = ["FLEET FIRMWARE STATUS."]
+            for mac, info in sorted(versions.items(), key=lambda x: x[1].get("hostname", "")):
+                lines.append(
+                    f"  {info.get('hostname', mac):25s} board={info.get('boardVersion', '?')} "
+                    f"v={info.get('version', '?')} ASIC={info.get('ASICModel', '?')}")
+            available = mm.list_firmware()
+            if available:
+                lines.append(f"AVAILABLE BINARIES: {', '.join(available.keys())}")
+            else:
+                lines.append("No firmware binaries staged.")
+            lines.append("W.O.P.R. out.")
+            return ("\n".join(lines), False)
+
+        # Set clock / frequency / voltage with safety validation
+        if re.search(r'\bset\b.*\b(?:freq|frequency|clock|voltage|core.?voltage|mhz|mv)\b', query_lower):
+            # Parse: "set frequency 525 on rawi_bitaxe1", "set clock 500mhz rawi_bitaxe2",
+            #         "set voltage 1150 on bitaxe601", "set freq 525 voltage 1150 rawi_bitaxe1"
+            mac_match = re.search(r'([0-9a-f]{2}[:-]){5}[0-9a-f]{2}', query_lower)
+            freq_match = re.search(r'\b(?:freq(?:uency)?|clock)\s*[=:]?\s*(\d+)', query_lower)
+            volt_match = re.search(r'\b(?:voltage|core.?voltage|cv)\s*[=:]?\s*(\d+)', query_lower)
+
+            freq_val = int(freq_match.group(1)) if freq_match else None
+            volt_val = int(volt_match.group(1)) if volt_match else None
+
+            if freq_val is None and volt_val is None:
+                return ("Specify values. Example: set frequency 525 on rawi_bitaxe1. W.O.P.R. out.", True)
+
+            # Extract miner identifier
+            if mac_match:
+                identifier = mac_match.group(0)
+            else:
+                # Remove the command parts and numbers, find the hostname
+                rest = re.sub(
+                    r'\b(?:set|freq(?:uency)?|clock|voltage|core.?voltage|cv|mhz|mv|on|to)\b|\d+',
+                    '', query_lower
+                ).strip()
+                identifier = rest.split()[0] if rest.split() else ""
+
+            if not identifier:
+                return ("Specify target miner. Example: set frequency 525 on rawi_bitaxe1. W.O.P.R. out.", True)
+
+            detail = mm.get_miner_detail(identifier)
+            if not detail or not detail.get("ip"):
+                return (f"Miner '{identifier}' not found in fleet. W.O.P.R. out.", True)
+
+            ip = detail["ip"]
+            mac = detail["mac"]
+            success, msg = mm.safe_set_clock(ip, mac, frequency=freq_val, core_voltage=volt_val)
+            if success:
+                return (f"CLOCK SET. {msg} W.O.P.R. out.", True)
+            return (f"CLOCK SET REJECTED. {msg} W.O.P.R. out.", True)
+
         # Throttle miner
         if "throttle miner" in query_lower or "throttle bitaxe" in query_lower:
             mac_match = re.search(r'([0-9a-f]{2}[:-]){5}[0-9a-f]{2}', query_lower)
