@@ -911,11 +911,19 @@ class MinerMonitor:
 
     def get_fleet_health(self):
         """Compute per-miner composite health score (0-100).
-        Components: temperature (25%), hashrate stability (25%),
-        uptime (20%), share quality (15%), WiFi RSSI (15%)."""
+
+        AxeOS miners (full telemetry):
+            temperature (25%), hashrate stability (25%),
+            uptime (20%), share quality (15%), WiFi RSSI (15%)
+
+        Pool-only miners (NerdMiners, cgminers):
+            hashrate stability (35%), online status (35%),
+            best difficulty (30%)
+        """
         all_miners = self.device_db.get_all_miners()
         results = {}
 
+        # --- Phase 1: AxeOS miners (full hardware telemetry) ---
         for miner in all_miners:
             mac = miner.get("mac", "")
             if not mac:
@@ -1000,12 +1008,106 @@ class MinerMonitor:
                 "grade": grade,
                 "hostname": miner.get("hostname", mac),
                 "status": miner.get("status", "unknown"),
+                "scoring": "full",
                 "components": {
                     "temperature": round(temp_score, 1),
                     "hashrate_stability": round(hr_score, 1),
                     "uptime": round(uptime_score, 1),
                     "share_quality": round(share_score, 1),
                     "wifi_signal": round(rssi_score, 1),
+                },
+            }
+
+        # --- Phase 2: Pool-only miners (NerdMiners, cgminers) ---
+        # These lack hardware telemetry — score on pool data only:
+        #   hashrate stability (35%), online status (35%), best difficulty (30%)
+        pool_workers = self.device_db.get_all_pool_workers()
+        scored_macs = set(results.keys())
+
+        # Compute fleet-wide best difficulty for relative scoring
+        fleet_best_diff = 0.0
+        for pw in pool_workers:
+            try:
+                d = float(pw.get("best_difficulty", 0) or 0)
+                if d > fleet_best_diff:
+                    fleet_best_diff = d
+            except (ValueError, TypeError):
+                pass
+
+        for pw in pool_workers:
+            mac = (pw.get("mac") or "").lower()
+            worker_type = pw.get("worker_type", "unknown")
+
+            # Skip AxeOS miners already scored with full telemetry
+            if mac and mac in scored_macs:
+                continue
+            # Skip workers with no type classification
+            if worker_type not in ("nerdminer", "cgminer"):
+                continue
+
+            worker_name = pw.get("worker_name", "unknown")
+            status = pw.get("status", "unknown")
+
+            # Hashrate stability (35%): 1h vs 1d ratio
+            hr_1h = float(pw.get("hashrate_1h", 0) or 0)
+            hr_1d = float(pw.get("hashrate_1d", 0) or 0)
+            if hr_1d > 0 and hr_1h > 0:
+                ratio = min(hr_1h / hr_1d, 1.2)
+                hr_score = min(100.0, ratio * 83.3)
+            elif status == "offline":
+                hr_score = 0.0
+            else:
+                hr_score = 50.0
+
+            # Online status (35%)
+            online_score = 100.0 if status == "online" else 0.0
+
+            # Best difficulty (30%): relative to fleet best
+            try:
+                worker_diff = float(pw.get("best_difficulty", 0) or 0)
+            except (ValueError, TypeError):
+                worker_diff = 0.0
+
+            if fleet_best_diff > 0 and worker_diff > 0:
+                # Log scale — even small diffs relative to fleet best
+                # should score decently since difficulty is largely luck
+                import math
+                diff_ratio = math.log10(max(worker_diff, 1)) / math.log10(max(fleet_best_diff, 10))
+                diff_score = min(100.0, diff_ratio * 100.0)
+            else:
+                diff_score = 50.0
+
+            composite = (
+                hr_score * 0.35
+                + online_score * 0.35
+                + diff_score * 0.30
+            )
+
+            if composite >= 90:
+                grade = "A"
+            elif composite >= 75:
+                grade = "B"
+            elif composite >= 60:
+                grade = "C"
+            elif composite >= 40:
+                grade = "D"
+            else:
+                grade = "F"
+
+            # Use MAC if available, otherwise key by worker name
+            key = mac if mac else f"pool:{worker_name}"
+
+            results[key] = {
+                "score": round(composite, 1),
+                "grade": grade,
+                "hostname": worker_name,
+                "status": status,
+                "worker_type": worker_type,
+                "scoring": "pool",
+                "components": {
+                    "hashrate_stability": round(hr_score, 1),
+                    "online_status": round(online_score, 1),
+                    "best_difficulty": round(diff_score, 1),
                 },
             }
 
